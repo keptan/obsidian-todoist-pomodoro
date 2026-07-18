@@ -1,0 +1,865 @@
+/* Mikumodoro Timer Plugin Styles */
+
+/* Connection Status */
+.mikumodoro-connection-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	margin-bottom: 16px;
+	border-radius: 6px;
+	background: var(--background-secondary);
+}
+
+.mikumodoro-status-dot {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	display: inline-block;
+	flex-shrink: 0;
+}
+
+.mikumodoro-status-dot.connected {
+	background: #22c55e;
+	box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+}
+
+.mikumodoro-status-dot.untested {
+	background: #f59e0b;
+}
+
+.mikumodoro-status-dot.disconnected {
+	background: var(--text-faint);
+}
+
+.mikumodoro-status-label {
+	font-size: 0.9em;
+	color: var(--text-muted);
+}
+
+/* Timer row: display + mute toggle */
+.mikumodoro-timer-row {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+
+.mikumodoro-timer-display {
+	font-size: 3.5em;
+	font-weight: 700;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	padding: 24px 0 12px;
+	color: var(--text-normal);
+	letter-spacing: 2px;
+}
+
+.mikumodoro-mute-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 1.3em;
+	padding: 4px 8px;
+	border-radius: 6px;
+	opacity: 0.6;
+	transition: opacity 0.15s, background 0.15s;
+}
+
+.mikumodoro-mute-btn:hover {
+	opacity: 1;
+	background: var(--background-modifier-hover);
+}
+
+.mikumodoro-timer-display.working { color: #ef4444; }
+.mikumodoro-timer-display.break { color: #22c55e; }
+.mikumodoro-timer-display.paused { color: var(--text-muted); opacity: 0.6; }
+
+.mikumodoro-current-task {
+	text-align: center;
+	padding: 8px 16px;
+	margin-bottom: 16px;
+	font-size: 0.95em;
+	color: var(--text-muted);
+}
+
+.mikumodoro-current-task .mikumodoro-task-name { font-weight: 500; }
+
+.mikumodoro-controls {
+	display: flex;
+	justify-content: center;
+	gap: 8px;
+	padding: 12px 0;
+}
+
+.mikumodoro-btn {
+	padding: 8px 20px;
+	border-radius: 6px;
+	border: none;
+	cursor: pointer;
+	font-size: 0.9em;
+	font-weight: 500;
+	transition: opacity 0.15s, transform 0.05s;
+}
+
+.mikumodoro-btn:active { transform: scale(0.97); }
+.mikumodoro-btn-primary { background: var(--interactive-accent); color: var(--text-on-accent); }
+.mikumodoro-btn-secondary { background: var(--background-modifier-hover); color: var(--text-normal); }
+.mikumodoro-btn-stop { background: #ef4444; color: white; }
+
+/* Task Selector */
+.mikumodoro-task-selector { padding: 12px 0; }
+
+.mikumodoro-task-selector-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 8px;
+}
+
+.mikumodoro-section-label {
+	font-size: 0.8em;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--text-muted);
+}
+
+.mikumodoro-refresh-icon {
+	cursor: pointer;
+	font-size: 1.1em;
+	color: var(--text-muted);
+	padding: 4px;
+	border-radius: 4px;
+	transition: background 0.15s, color 0.15s;
+	display: inline-flex;
+	align-items: center;
+}
+
+.mikumodoro-refresh-icon:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.mikumodoro-refresh-icon.spinning {
+	animation: mikumodoro-spin 0.8s linear infinite;
+}
+
+@keyframes mikumodoro-spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+
+.mikumodoro-task-list {
+	max-height: 400px;
+	overflow-y: auto;
+}
+
+/* Task wrapper for nesting */
+.mikumodoro-task-wrapper {
+	margin-bottom: 2px;
+}
+
+.mikumodoro-task-wrapper.subtask {
+	border-left: 2px solid var(--background-modifier-border);
+	margin-left: 16px;
+}
+
+/* Task item row */
+.mikumodoro-task-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	border-radius: 6px;
+	cursor: pointer;
+	transition: background 0.1s;
+}
+
+.mikumodoro-task-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.mikumodoro-task-item.selected {
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	border: 1px solid color-mix(in srgb, var(--interactive-accent) 40%, transparent);
+	padding: 7px 9px;
+}
+
+.mikumodoro-task-item.selected .mikumodoro-task-item-name {
+	color: var(--text-normal);
+	font-weight: 500;
+}
+
+.mikumodoro-task-arrow {
+	cursor: pointer;
+	width: 16px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.75em;
+	flex-shrink: 0;
+	color: var(--text-muted);
+	user-select: none;
+}
+
+.mikumodoro-task-arrow:hover {
+	color: var(--text-normal);
+}
+
+.mikumodoro-task-item-name {
+	font-size: 0.9em;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mikumodoro-task-item-due {
+	font-size: 0.75em;
+	color: var(--text-muted);
+	background: var(--background-modifier-hover);
+	padding: 2px 6px;
+	border-radius: 8px;
+	flex-shrink: 0;
+}
+
+.mikumodoro-task-item.selected .mikumodoro-task-item-due {
+	background: color-mix(in srgb, var(--interactive-accent) 20%, transparent);
+}
+
+.mikumodoro-task-item-time {
+	font-size: 0.72em;
+	color: var(--text-muted);
+	background: var(--background-modifier-hover);
+	padding: 2px 6px;
+	border-radius: 8px;
+	flex-shrink: 0;
+}
+
+.mikumodoro-task-priority {
+	font-size: 0.6em;
+	flex-shrink: 0;
+}
+
+/* Subtask container */
+.mikumodoro-subtask-container {
+	/* children are .mikumodoro-task-wrapper */
+}
+
+/* Task detail card */
+.mikumodoro-task-detail {
+	margin: 4px 0 8px;
+	padding: 10px 12px;
+	border-radius: 8px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.mikumodoro-detail-row {
+	display: flex;
+	gap: 8px;
+	padding: 3px 0;
+	font-size: 0.82em;
+	align-items: baseline;
+}
+
+.mikumodoro-detail-label {
+	color: var(--text-muted);
+	min-width: 70px;
+	flex-shrink: 0;
+}
+
+.mikumodoro-detail-value {
+	color: var(--text-normal);
+}
+
+.mikumodoro-detail-highlight {
+	font-weight: 600;
+	color: var(--interactive-accent);
+}
+
+/* Action buttons in detail */
+.mikumodoro-task-actions {
+	display: flex;
+	gap: 6px;
+	margin-top: 8px;
+	flex-wrap: wrap;
+}
+
+.mikumodoro-btn-mini {
+	padding: 4px 10px;
+	font-size: 0.78em;
+	border-radius: 4px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	cursor: pointer;
+	transition: background 0.1s, border-color 0.1s;
+}
+
+.mikumodoro-btn-mini:hover {
+	background: var(--background-modifier-hover);
+	border-color: var(--interactive-accent);
+}
+
+.mikumodoro-btn-complete {
+	background: color-mix(in srgb, #22c55e 15%, var(--background-primary));
+	border-color: color-mix(in srgb, #22c55e 40%, var(--background-modifier-border));
+	color: #22c55e;
+	font-weight: 600;
+}
+
+.mikumodoro-btn-complete:hover {
+	background: color-mix(in srgb, #22c55e 25%, var(--background-primary));
+}
+
+/* Modals */
+.mikumodoro-modal-desc {
+	color: var(--text-muted);
+	font-size: 0.9em;
+	margin-bottom: 12px;
+}
+
+.mikumodoro-modal-input {
+	width: 100%;
+	padding: 8px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 0.9em;
+	margin-bottom: 8px;
+}
+
+.mikumodoro-modal-input:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+}
+
+.mikumodoro-modal-results {
+	max-height: 200px;
+	overflow-y: auto;
+	margin-bottom: 8px;
+}
+
+.mikumodoro-modal-result-item {
+	padding: 6px 12px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.85em;
+}
+
+.mikumodoro-modal-result-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.mikumodoro-no-tasks {
+	text-align: center;
+	color: var(--text-muted);
+	padding: 20px;
+	font-size: 0.9em;
+}
+
+/* Sessions List */
+.mikumodoro-sessions-section {
+	padding: 16px 0;
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 16px;
+}
+
+.mikumodoro-sessions-list { margin-top: 8px; }
+
+.mikumodoro-session-total {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	margin-bottom: 8px;
+	font-weight: 500;
+}
+
+.mikumodoro-session-item {
+	display: flex;
+	gap: 8px;
+	padding: 4px 0;
+	font-size: 0.85em;
+}
+
+.mikumodoro-session-time { color: var(--text-muted); min-width: 50px; }
+.mikumodoro-session-task { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mikumodoro-session-duration { color: var(--text-muted); min-width: 35px; text-align: right; }
+
+/* Heatmap */
+.mikumodoro-heatmap-container {
+	padding: 12px;
+	border-radius: 8px;
+	background: var(--background-secondary);
+}
+
+.mikumodoro-heatmap-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 8px;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.mikumodoro-heatmap-title-area { font-weight: 600; font-size: 1.1em; }
+
+.mikumodoro-heatmap-toggle {
+	display: flex;
+	gap: 0;
+	border-radius: 6px;
+	overflow: hidden;
+	border: 1px solid var(--background-modifier-border);
+}
+
+.mikumodoro-heatmap-toggle-btn {
+	padding: 4px 12px;
+	border: none;
+	background: var(--background-primary);
+	color: var(--text-muted);
+	cursor: pointer;
+	font-size: 0.8em;
+	transition: background 0.1s;
+}
+
+.mikumodoro-heatmap-toggle-btn.active {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-weight: 500;
+}
+
+.mikumodoro-heatmap-nav {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.mikumodoro-heatmap-nav-btn {
+	width: 24px;
+	height: 24px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	cursor: pointer;
+	font-size: 1em;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.1s;
+}
+
+.mikumodoro-heatmap-nav-btn:hover { background: var(--background-modifier-hover); }
+.mikumodoro-heatmap-nav-btn.disabled { opacity: 0.3; cursor: default; }
+
+.mikumodoro-heatmap-nav-label {
+	font-size: 0.85em;
+	font-weight: 500;
+	min-width: 90px;
+	text-align: center;
+}
+
+.mikumodoro-heatmap-content {
+	animation: mikumodoro-slide 0.2s ease;
+}
+
+@keyframes mikumodoro-slide {
+	from { opacity: 0; transform: translateX(8px); }
+	to { opacity: 1; transform: translateX(0); }
+}
+
+.mikumodoro-heatmap-stats {
+	font-size: 0.8em;
+	color: var(--text-muted);
+	margin-bottom: 8px;
+}
+
+.mikumodoro-heatmap-grid-wrapper {
+	display: flex;
+	gap: 3px;
+	overflow-x: auto;
+}
+
+.mikumodoro-heatmap-labels {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 18px;
+	flex-shrink: 0;
+}
+
+.mikumodoro-heatmap-day-label {
+	font-size: 0.6em;
+	color: var(--text-muted);
+	height: 10px;
+	line-height: 10px;
+}
+
+.mikumodoro-heatmap-grid-area {
+	display: flex;
+	flex-direction: column;
+}
+
+.mikumodoro-heatmap-month-labels {
+	display: flex;
+	gap: 2px;
+	height: 16px;
+	margin-bottom: 2px;
+}
+
+.mikumodoro-heatmap-month-label {
+	font-size: 0.6em;
+	color: var(--text-muted);
+	width: 10px;
+	flex-shrink: 0;
+}
+
+.mikumodoro-heatmap-grid {
+	display: flex;
+	gap: 2px;
+}
+
+.mikumodoro-heatmap-week {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.mikumodoro-heatmap-cell {
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+	background-color: #ebedf0;
+	flex-shrink: 0;
+	position: relative;
+}
+
+.mikumodoro-heatmap-cell.empty { background-color: #ebedf0; }
+.mikumodoro-heatmap-cell.out-of-range { background-color: transparent; }
+.mikumodoro-heatmap-cell.future {
+	background-color: transparent;
+	border: 1px dashed var(--background-modifier-border);
+	box-sizing: border-box;
+	width: 10px;
+	height: 10px;
+}
+
+/* Due date highlight on heatmap cells */
+.mikumodoro-heatmap-cell.has-due {
+	box-shadow: 0 0 0 1.5px #f59e0b;
+}
+
+.mikumodoro-heatmap-month-cell.has-due {
+	box-shadow: 0 0 0 1.5px #f59e0b;
+}
+
+/* Completion count badge */
+.mikumodoro-completion-badge {
+	position: absolute;
+	top: -4px;
+	right: -4px;
+	font-size: 0.5em;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-radius: 50%;
+	width: 10px;
+	height: 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	line-height: 1;
+}
+.mikumodoro-heatmap-cell.today {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+}
+
+/* Tooltip hover */
+.mikumodoro-heatmap-cell.has-tooltip:hover::after {
+	content: attr(data-tooltip);
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: 50%;
+	transform: translateX(-50%);
+	background: var(--background-primary-alt);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 0.75em;
+	white-space: pre;
+	max-width: 280px;
+	overflow: hidden;
+	pointer-events: none;
+	z-index: 100;
+	color: var(--text-normal);
+	box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+/* Month view */
+.mikumodoro-heatmap-month-header {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 3px;
+	margin-bottom: 4px;
+}
+
+.mikumodoro-heatmap-month-day-label {
+	font-size: 0.65em;
+	color: var(--text-muted);
+	text-align: center;
+}
+
+.mikumodoro-heatmap-month-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 3px;
+}
+
+.mikumodoro-heatmap-month-cell {
+	aspect-ratio: 1;
+	border-radius: 4px;
+	background-color: #ebedf0;
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-end;
+	padding: 2px 4px;
+	min-height: 24px;
+	position: relative;
+}
+
+.mikumodoro-heatmap-month-cell.empty { background-color: #ebedf0; }
+.mikumodoro-heatmap-month-cell.out-of-range { background-color: transparent; }
+.mikumodoro-heatmap-month-cell.future {
+	background-color: transparent;
+	border: 1px dashed var(--background-modifier-border);
+}
+.mikumodoro-heatmap-month-cell.today {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 1px;
+}
+
+.mikumodoro-heatmap-month-day-num {
+	font-size: 0.65em;
+	color: var(--text-muted);
+}
+
+.mikumodoro-heatmap-month-cell.has-tooltip:hover::after {
+	content: attr(data-tooltip);
+	position: absolute;
+	bottom: calc(100% + 6px);
+	left: 50%;
+	transform: translateX(-50%);
+	background: var(--background-primary-alt);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 0.75em;
+	white-space: pre;
+	max-width: 280px;
+	overflow: hidden;
+	pointer-events: none;
+	z-index: 100;
+	color: var(--text-normal);
+	box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+/* Legend */
+.mikumodoro-heatmap-legend {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 8px;
+	justify-content: flex-end;
+}
+
+.mikumodoro-heatmap-legend-label {
+	font-size: 0.6em;
+	color: var(--text-muted);
+}
+
+/* Dark theme */
+.theme-dark .mikumodoro-heatmap-cell.empty,
+.theme-dark .mikumodoro-heatmap-month-cell.empty {
+	background-color: #2d333b;
+}
+
+.theme-dark .mikumodoro-heatmap-cell.future,
+.theme-dark .mikumodoro-heatmap-month-cell.future {
+	border-color: var(--background-modifier-border);
+}
+
+/* Project headers in task list */
+.mikumodoro-project-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	cursor: pointer;
+	border-radius: 6px;
+	font-size: 0.85em;
+	font-weight: 600;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	margin-top: 4px;
+}
+
+.mikumodoro-project-header:hover {
+	background: var(--background-modifier-hover);
+}
+
+.mikumodoro-project-arrow {
+	width: 14px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.75em;
+	user-select: none;
+}
+
+.mikumodoro-project-name {
+	flex: 1;
+}
+
+.mikumodoro-project-count {
+	font-size: 0.8em;
+	background: var(--background-modifier-hover);
+	padding: 1px 6px;
+	border-radius: 8px;
+	font-weight: 500;
+}
+
+.mikumodoro-project-content {
+	margin-left: 14px;
+	border-left: 2px solid var(--background-modifier-border);
+	padding-left: 8px;
+}
+
+/* Header action buttons (in project & standalone task headers) */
+.mikumodoro-header-actions {
+	display: flex;
+	gap: 4px;
+	margin-left: auto;
+}
+
+.mikumodoro-header-action-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 0.85em;
+	padding: 2px 6px;
+	border-radius: 4px;
+	opacity: 0.5;
+	color: var(--text-muted);
+	transition: opacity 0.15s, background 0.15s;
+}
+
+.mikumodoro-header-action-btn:hover {
+	opacity: 1;
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+/* Status bar */
+.status-bar-item .mikumodoro-statusbar {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+/* Scrollable content area */
+.mikumodoro-scroll-content {
+	flex: 1;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding-bottom: 8px;
+}
+
+/* Bottom action bar */
+.mikumodoro-bottom-actions {
+	display: flex;
+	gap: 8px;
+	padding: 12px 0 28px;
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 16px;
+	position: sticky;
+	bottom: 0;
+	background: var(--background-primary);
+}
+
+.mikumodoro-bottom-btn {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+}
+
+/* Modal autocomplete suggestions */
+.mikumodoro-modal-suggestions {
+	max-height: 160px;
+	overflow-y: auto;
+	margin-bottom: 12px;
+}
+
+.mikumodoro-modal-suggestion-item {
+	padding: 6px 12px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 0.85em;
+	color: var(--text-normal);
+}
+
+.mikumodoro-modal-suggestion-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+/* Manual time logger */
+.mikumodoro-log-duration-area {
+	margin-bottom: 16px;
+}
+
+.mikumodoro-log-label {
+	display: block;
+	font-size: 0.8em;
+	color: var(--text-muted);
+	margin-bottom: 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.mikumodoro-log-slider-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.mikumodoro-log-slider {
+	flex: 1;
+	accent-color: var(--interactive-accent);
+}
+
+.mikumodoro-log-value {
+	font-size: 0.9em;
+	font-weight: 600;
+	color: var(--text-normal);
+	min-width: 50px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.mikumodoro-log-date-area {
+	margin-bottom: 16px;
+}
+
+.mikumodoro-log-date-input {
+	padding: 6px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 0.9em;
+}
