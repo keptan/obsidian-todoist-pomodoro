@@ -184,8 +184,15 @@ function renderYearView(
 	while (cursor <= yearEnd && currentWeek < 54) {
 		const monthLabel = monthLabelRow.createEl('span', { cls: 'mikumodoro-heatmap-month-label' });
 		const firstWeekDate = new Date(cursor);
-		if (firstWeekDate.getMonth() !== new Date(cursor.getTime() - 7 * 86400000).getMonth() || currentWeek === 0) {
-			monthLabel.setText(monthLabels[firstWeekDate.getMonth()] ?? '');
+		const prevWeekDate = new Date(cursor.getTime() - 7 * 86400000);
+		if (firstWeekDate.getMonth() !== prevWeekDate.getMonth() || currentWeek === 0) {
+			// Don't show Dec for the first week (it's from the previous year)
+			const monthIdx = firstWeekDate.getMonth();
+			if (currentWeek === 0 && monthIdx === 11) {
+				monthLabel.setText('');
+			} else {
+				monthLabel.setText(monthLabels[monthIdx] ?? '');
+			}
 		}
 
 		const weekCol = grid.createEl('div', { cls: 'mikumodoro-heatmap-week' });

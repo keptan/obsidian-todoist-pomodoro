@@ -108,7 +108,7 @@
 .mikumodoro-btn-stop { background: #ef4444; color: white; }
 
 /* Task Selector */
-.mikumodoro-task-selector { padding: 12px 0; }
+.mikumodoro-task-selector { padding: 12px 0; flex: 1; overflow-y: auto; }
 
 .mikumodoro-task-selector-header {
 	display: flex;
@@ -362,10 +362,14 @@
 
 /* Sessions List */
 .mikumodoro-sessions-section {
-	padding: 16px 0;
+	padding: 8px 12px;
 	border-top: 1px solid var(--background-modifier-border);
-	margin-top: 16px;
+	margin-top: auto;
 	overflow-y: auto;
+	min-height: 80px;
+	border-radius: 6px;
+	background-color: var(--background-secondary);
+	flex-shrink: 0;
 }
 
 .mikumodoro-sessions-resize-handle {
@@ -520,6 +524,7 @@
 	display: flex;
 	gap: 3px;
 	overflow-x: auto;
+	padding-bottom: 4px;
 }
 
 .mikumodoro-heatmap-labels {
@@ -554,6 +559,9 @@
 	color: var(--text-muted);
 	white-space: nowrap;
 	flex-shrink: 0;
+	width: 10px;
+	overflow: visible;
+	text-align: left;
 }
 
 .mikumodoro-heatmap-grid {
@@ -577,7 +585,11 @@
 }
 
 .mikumodoro-heatmap-cell.empty { background-color: var(--background-modifier-border); }
-.mikumodoro-heatmap-cell:hover { background-color: var(--background-modifier-hover) !important; }
+.mikumodoro-heatmap-cell:hover {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -1px;
+	filter: brightness(1.3);
+}
 .mikumodoro-heatmap-cell.out-of-range { background-color: transparent; }
 .mikumodoro-heatmap-cell.future {
 	background-color: transparent;
@@ -676,7 +688,11 @@
 }
 
 .mikumodoro-heatmap-month-cell.empty { background-color: var(--background-modifier-border); }
-.mikumodoro-heatmap-month-cell:hover { background-color: var(--background-modifier-hover) !important; }
+.mikumodoro-heatmap-month-cell:hover {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -1px;
+	filter: brightness(1.3);
+}
 .mikumodoro-heatmap-month-cell.out-of-range { background-color: transparent; }
 .mikumodoro-heatmap-month-cell.future {
 	background-color: transparent;
@@ -813,6 +829,8 @@
 
 /* Scrollable content area */
 .mikumodoro-scroll-content {
+	display: flex;
+	flex-direction: column;
 	flex: 1;
 	overflow-y: auto;
 	overflow-x: hidden;
