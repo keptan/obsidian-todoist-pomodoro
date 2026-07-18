@@ -94,7 +94,11 @@ export class TimerView extends ItemView {
 			});
 			startBtn.addEventListener('click', () => {
 				const task = this.plugin.getSelectedTask();
-				this.plugin.timerEngine.startWork(task);
+				if (!task) {
+					this.openTaskPicker();
+				} else {
+					this.plugin.timerEngine.startWork(task);
+				}
 			});
 
 			this.renderTaskSelector(scrollContent);
@@ -501,6 +505,32 @@ export class TimerView extends ItemView {
 			this.render();
 		});
 
+		// Note link buttons for top-level tasks
+		if (depth === 0) {
+			const notePath = this.plugin.getTaskNotePath(task.id);
+			if (notePath) {
+				const openNoteBtn = item.createEl('button', {
+					cls: 'mikumodoro-header-action-btn',
+					attr: { 'aria-label': 'Open linked note' },
+				});
+				openNoteBtn.setText('📂');
+				openNoteBtn.addEventListener('click', (e) => {
+					e.stopPropagation();
+					this.app.workspace.openLinkText(notePath, '', false);
+				});
+			} else {
+				const linkBtn = item.createEl('button', {
+					cls: 'mikumodoro-header-action-btn',
+					attr: { 'aria-label': 'Link note' },
+				});
+				linkBtn.setText('🔗');
+				linkBtn.addEventListener('click', (e) => {
+					e.stopPropagation();
+					this.openNoteLinker(task);
+				});
+			}
+		}
+
 		// Subtask container (for rendering children)
 		const subtaskContainer = wrapper.createEl('div', { cls: 'mikumodoro-subtask-container' });
 		const expanded = this.expandedTasks.has(task.id);
@@ -774,6 +804,118 @@ export class TimerView extends ItemView {
 		}
 	}
 
+	private openTaskPicker() {
+		const modal = new Modal(this.app);
+		modal.titleEl.setText('Pick a task');
+
+		const inputEl = modal.contentEl.createEl('input', {
+			type: 'text',
+			placeholder: 'Search tasks or type a custom activity...',
+			cls: 'mikumodoro-modal-input',
+		});
+
+		const suggestionsEl = modal.contentEl.createEl('div', { cls: 'mikumodoro-modal-suggestions' });
+		suggestionsEl.style.maxHeight = '300px';
+
+		const todoistTasks = this.plugin.getCachedTasks();
+		const customLabels = this.plugin.getCustomActivityLabels();
+
+		const renderSuggestions = (filter: string) => {
+			suggestionsEl.empty();
+			const q = filter.toLowerCase();
+
+			// Custom activities section
+			const customMatched = customLabels
+				.filter(l => l.toLowerCase().includes(q))
+				.slice(0, 5);
+
+			// Todoist tasks section
+			const taskMatched = todoistTasks
+				.filter(t => t.content.toLowerCase().includes(q))
+				.slice(0, 15);
+
+			if (customMatched.length > 0) {
+				const header = suggestionsEl.createEl('div', {
+					cls: 'mikumodoro-modal-suggestion-header',
+					text: 'Recent Activities',
+				});
+				header.style.cssText = 'font-size:0.7em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;padding:4px 12px 2px;';
+				for (const label of customMatched) {
+					const item = suggestionsEl.createEl('div', {
+						cls: 'mikumodoro-modal-suggestion-item',
+						text: '\u26a1 ' + label,
+					});
+					item.addEventListener('click', () => {
+						this.plugin.trackCustomActivity(label);
+						modal.close();
+						this.render();
+					});
+				}
+			}
+
+			if (taskMatched.length > 0) {
+				const header = suggestionsEl.createEl('div', {
+					cls: 'mikumodoro-modal-suggestion-header',
+					text: 'Todoist Tasks',
+				});
+				header.style.cssText = 'font-size:0.7em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;padding:4px 12px 2px;';
+				for (const task of taskMatched) {
+					const item = suggestionsEl.createEl('div', {
+						cls: 'mikumodoro-modal-suggestion-item',
+						text: task.content,
+					});
+					if (task.project_name && task.project_name !== 'Inbox') {
+						const proj = item.createEl('span', {
+							cls: 'mikumodoro-modal-suggestion-project',
+							text: ' ' + task.project_name,
+						});
+						proj.style.cssText = 'color:var(--text-muted);font-size:0.85em;';
+					}
+					item.addEventListener('click', () => {
+						this.plugin.setSelectedTask(task);
+						this.plugin.timerEngine.startWork(task);
+						modal.close();
+						this.render();
+					});
+				}
+			}
+
+			if (customMatched.length === 0 && taskMatched.length === 0 && filter.trim()) {
+				suggestionsEl.createEl('div', {
+					cls: 'mikumodoro-modal-suggestion-item',
+					text: '\u26a1 Start custom: "' + filter.trim() + '"',
+					attr: { style: 'color:var(--interactive-accent);' },
+				}).addEventListener('click', () => {
+					this.plugin.trackCustomActivity(filter.trim());
+					modal.close();
+					this.render();
+				});
+			}
+		};
+
+		inputEl.addEventListener('input', () => renderSuggestions(inputEl.value.trim()));
+		inputEl.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				const val = inputEl.value.trim();
+				if (!val) return;
+				// Try exact todoist match first
+				const match = todoistTasks.find(t => t.content.toLowerCase() === val.toLowerCase());
+				if (match) {
+					this.plugin.setSelectedTask(match);
+					this.plugin.timerEngine.startWork(match);
+				} else {
+					this.plugin.trackCustomActivity(val);
+				}
+				modal.close();
+				this.render();
+			}
+		});
+
+		renderSuggestions('');
+		inputEl.focus();
+		modal.open();
+	}
+
 	private renderBottomActions(container: HTMLElement) {
 		const bar = container.createEl('div', { cls: 'mikumodoro-bottom-actions' });
 
@@ -959,6 +1101,57 @@ export class TimerView extends ItemView {
 		if (todaySessions.length === 0) return;
 
 		const section = container.createEl('div', { cls: 'mikumodoro-sessions-section' });
+
+		// Resize handle at top
+		const resizeHandle = section.createEl('div', { cls: 'mikumodoro-sessions-resize-handle' });
+		resizeHandle.setText('⠿');
+
+		// Restore saved height
+		const savedHeight = this.plugin.settings.sessionsHeight;
+		if (savedHeight && savedHeight > 60) {
+			section.style.height = savedHeight + 'px';
+		}
+
+		let isResizing = false;
+		let startY = 0;
+		let startHeight = 0;
+
+		resizeHandle.addEventListener('mousedown', (e) => {
+			isResizing = true;
+			startY = e.clientY;
+			startHeight = section.offsetHeight;
+			section.classList.add('resizing');
+			document.body.style.cursor = 'row-resize';
+			document.body.style.userSelect = 'none';
+		});
+
+		const onMove = (e: MouseEvent) => {
+			if (!isResizing) return;
+			const dy = startY - e.clientY;
+			const newHeight = Math.max(80, Math.min(section.parentElement!.offsetHeight - 100, startHeight + dy));
+			section.style.height = newHeight + 'px';
+		};
+
+		const onUp = () => {
+			if (!isResizing) return;
+			isResizing = false;
+			section.classList.remove('resizing');
+			document.body.style.cursor = '';
+			document.body.style.userSelect = '';
+			this.plugin.settings.sessionsHeight = section.offsetHeight;
+			this.plugin.saveSettings();
+		};
+
+		document.addEventListener('mousemove', onMove);
+		document.addEventListener('mouseup', onUp);
+		// Clean up when view closes
+		this.registerEvent(this.app.workspace.on('layout-change', () => {
+			if (!section.isConnected) {
+				document.removeEventListener('mousemove', onMove);
+				document.removeEventListener('mouseup', onUp);
+			}
+		}));
+
 		section.createEl('div', { text: 'Today\'s Sessions', cls: 'mikumodoro-section-label' });
 
 		const list = section.createEl('div', { cls: 'mikumodoro-sessions-list' });

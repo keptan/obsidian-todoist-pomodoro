@@ -54,16 +54,25 @@ export function renderHeatmap(
 	}
 
 	function getMaxMinutesInRange(startDate: Date, endDate: Date): number {
-		let max = 0;
+		const values: number[] = [];
 		const d = new Date(startDate);
 		while (d <= endDate) {
 			const key = d.toISOString().slice(0, 10);
 			const val = dayMap.get(key) ?? 0;
-			if (val > max) max = val;
+			if (val > 0) values.push(val);
 			d.setDate(d.getDate() + 1);
 		}
-		return Math.max(1, max);
+		if (values.length === 0) return 1;
+		values.sort((a, b) => a - b);
+		// Use 90th percentile as reference max so outliers don't crush the scale
+		const p90Index = Math.floor(values.length * 0.9);
+		const p90 = values[Math.min(p90Index, values.length - 1)] || 1;
+		// But never go below the actual max's 50% so colors are still visible
+		const actualMax = values[values.length - 1] ?? 1;
+		return Math.max(p90, actualMax * 0.5, 1);
 	}
+
+	let slideDirection: 'left' | 'right' | 'none' = 'none';
 
 	function render() {
 		container.empty();
@@ -71,33 +80,37 @@ export function renderHeatmap(
 		const header = container.createEl('div', { cls: 'mikumodoro-heatmap-header' });
 		header.createEl('div', { cls: 'mikumodoro-heatmap-title-area' });
 
-		const toggleArea = header.createEl('div', { cls: 'mikumodoro-heatmap-toggle' });
-		const yearBtn = toggleArea.createEl('button', {
-			cls: 'mikumodoro-heatmap-toggle-btn' + (viewMode === 'year' ? ' active' : ''),
-			text: 'Year',
-		});
-		const monthBtn = toggleArea.createEl('button', {
-			cls: 'mikumodoro-heatmap-toggle-btn' + (viewMode === 'month' ? ' active' : ''),
-			text: 'Month',
-		});
-		yearBtn.addEventListener('click', () => { viewMode = 'year'; render(); });
-		monthBtn.addEventListener('click', () => { viewMode = 'month'; render(); });
-
 		const navArea = header.createEl('div', { cls: 'mikumodoro-heatmap-nav' });
 		const prevBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', text: '‹' });
 		const labelEl = navArea.createEl('span', { cls: 'mikumodoro-heatmap-nav-label' });
 		const nextBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', text: '›' });
 
+		const toggleArea = navArea;
+		const yearBtn = toggleArea.createEl('button', {
+			cls: 'mikumodoro-heatmap-toggle-btn' + (viewMode === 'year' ? ' active' : ''),
+			text: '📅',
+			attr: { 'aria-label': 'Year view' },
+		});
+		const monthBtn = toggleArea.createEl('button', {
+			cls: 'mikumodoro-heatmap-toggle-btn' + (viewMode === 'month' ? ' active' : ''),
+			text: '🗓️',
+			attr: { 'aria-label': 'Month view' },
+		});
+		yearBtn.addEventListener('click', () => { viewMode = 'year'; slideDirection = 'none'; render(); });
+		monthBtn.addEventListener('click', () => { viewMode = 'month'; slideDirection = 'none'; render(); });
+
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
 
 		const contentArea = container.createEl('div', { cls: 'mikumodoro-heatmap-content' });
+		if (slideDirection === 'left') contentArea.classList.add('slide-left');
+		else if (slideDirection === 'right') contentArea.classList.add('slide-right');
 
 		if (viewMode === 'year') {
 			labelEl.setText(String(currentYear));
-			prevBtn.addEventListener('click', () => { currentYear--; render(); });
+			prevBtn.addEventListener('click', () => { currentYear--; slideDirection = 'right'; render(); });
 			nextBtn.addEventListener('click', () => {
-				if (currentYear < today.getFullYear()) { currentYear++; render(); }
+				if (currentYear < today.getFullYear()) { currentYear++; slideDirection = 'left'; render(); }
 			});
 			if (currentYear >= today.getFullYear()) nextBtn.classList.add('disabled');
 			renderYearView(contentArea, currentYear, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange);
@@ -106,12 +119,12 @@ export function renderHeatmap(
 			labelEl.setText(`${monthNames[currentMonth]} ${currentYear}`);
 			prevBtn.addEventListener('click', () => {
 				currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; }
-				render();
+				slideDirection = 'right'; render();
 			});
 			nextBtn.addEventListener('click', () => {
 				if (currentYear < today.getFullYear() || (currentYear === today.getFullYear() && currentMonth < today.getMonth())) {
 					currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; }
-					render();
+					slideDirection = 'left'; render();
 				}
 			});
 			if (currentYear > today.getFullYear() || (currentYear === today.getFullYear() && currentMonth >= today.getMonth())) {
@@ -210,7 +223,7 @@ function renderYearView(
 				cell.createEl('span', { cls: 'mikumodoro-completion-badge', text: String(completions) });
 			}
 
-			if (isInYear && !isFuture) {
+			if (isInYear) {
 				const dueTasks = dueDateTasks.get(dateStr) ?? [];
 				const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap);
 				cell.setAttribute('data-tooltip', tooltipText);
@@ -383,7 +396,17 @@ function interpolateColor(hex: string, intensity: number): string {
 	const r = parseInt(hex.slice(1, 3), 16);
 	const g = parseInt(hex.slice(3, 5), 16);
 	const b = parseInt(hex.slice(5, 7), 16);
-	const bgR = 235, bgG = 237, bgB = 240;
+	// Parse the CSS variable for base background color
+	const baseColor = getComputedStyle(document.body).getPropertyValue('--background-modifier-border').trim();
+	let bgR = 235, bgG = 237, bgB = 240;
+	if (baseColor.startsWith('#')) {
+		bgR = parseInt(baseColor.slice(1, 3), 16);
+		bgG = parseInt(baseColor.slice(3, 5), 16);
+		bgB = parseInt(baseColor.slice(5, 7), 16);
+	} else if (baseColor.startsWith('rgb')) {
+		const m = baseColor.match(/\d+/g);
+		if (m && m[0] && m[1] && m[2]) { bgR = +m[0]; bgG = +m[1]; bgB = +m[2]; }
+	}
 	const finalR = Math.round(bgR + (r - bgR) * intensity);
 	const finalG = Math.round(bgG + (g - bgG) * intensity);
 	const finalB = Math.round(bgB + (b - bgB) * intensity);

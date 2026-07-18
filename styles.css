@@ -365,6 +365,27 @@
 	padding: 16px 0;
 	border-top: 1px solid var(--background-modifier-border);
 	margin-top: 16px;
+	overflow-y: auto;
+}
+
+.mikumodoro-sessions-resize-handle {
+	height: 6px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: row-resize;
+	font-size: 0.6em;
+	color: var(--text-faint);
+	margin-bottom: 4px;
+	user-select: none;
+}
+
+.mikumodoro-sessions-resize-handle:hover {
+	color: var(--text-muted);
+}
+
+.mikumodoro-sessions-section.resizing {
+	overflow: hidden;
 }
 
 .mikumodoro-sessions-list { margin-top: 8px; }
@@ -407,26 +428,27 @@
 
 .mikumodoro-heatmap-toggle {
 	display: flex;
-	gap: 0;
-	border-radius: 6px;
-	overflow: hidden;
-	border: 1px solid var(--background-modifier-border);
+	gap: 2px;
 }
 
 .mikumodoro-heatmap-toggle-btn {
-	padding: 4px 12px;
+	padding: 2px 6px;
 	border: none;
-	background: var(--background-primary);
+	background: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
-	font-size: 0.8em;
-	transition: background 0.1s;
+	font-size: 1em;
+	line-height: 1;
+	transition: opacity 0.1s;
+	opacity: 0.5;
+}
+
+.mikumodoro-heatmap-toggle-btn:hover {
+	opacity: 0.8;
 }
 
 .mikumodoro-heatmap-toggle-btn.active {
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	font-weight: 500;
+	opacity: 1;
 }
 
 .mikumodoro-heatmap-nav {
@@ -462,11 +484,29 @@
 }
 
 .mikumodoro-heatmap-content {
-	animation: mikumodoro-slide 0.2s ease;
+	animation: mikumodoro-slide-in 0.25s ease;
 }
 
-@keyframes mikumodoro-slide {
-	from { opacity: 0; transform: translateX(8px); }
+@keyframes mikumodoro-slide-in {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+.mikumodoro-heatmap-content.slide-left {
+	animation: mikumodoro-slide-left 0.25s ease;
+}
+
+@keyframes mikumodoro-slide-left {
+	from { opacity: 0; transform: translateX(30px); }
+	to { opacity: 1; transform: translateX(0); }
+}
+
+.mikumodoro-heatmap-content.slide-right {
+	animation: mikumodoro-slide-right 0.25s ease;
+}
+
+@keyframes mikumodoro-slide-right {
+	from { opacity: 0; transform: translateX(-30px); }
 	to { opacity: 1; transform: translateX(0); }
 }
 
@@ -512,7 +552,7 @@
 .mikumodoro-heatmap-month-label {
 	font-size: 0.6em;
 	color: var(--text-muted);
-	width: 10px;
+	white-space: nowrap;
 	flex-shrink: 0;
 }
 
@@ -531,12 +571,13 @@
 	width: 10px;
 	height: 10px;
 	border-radius: 2px;
-	background-color: #ebedf0;
+	background-color: var(--background-modifier-border);
 	flex-shrink: 0;
 	position: relative;
 }
 
-.mikumodoro-heatmap-cell.empty { background-color: #ebedf0; }
+.mikumodoro-heatmap-cell.empty { background-color: var(--background-modifier-border); }
+.mikumodoro-heatmap-cell:hover { background-color: var(--background-modifier-hover) !important; }
 .mikumodoro-heatmap-cell.out-of-range { background-color: transparent; }
 .mikumodoro-heatmap-cell.future {
 	background-color: transparent;
@@ -544,6 +585,10 @@
 	box-sizing: border-box;
 	width: 10px;
 	height: 10px;
+}
+
+.mikumodoro-heatmap-cell.future:hover {
+	background-color: var(--background-modifier-hover);
 }
 
 /* Due date highlight on heatmap cells */
@@ -621,7 +666,7 @@
 .mikumodoro-heatmap-month-cell {
 	aspect-ratio: 1;
 	border-radius: 4px;
-	background-color: #ebedf0;
+	background-color: var(--background-modifier-border);
 	display: flex;
 	align-items: flex-start;
 	justify-content: flex-end;
@@ -630,11 +675,16 @@
 	position: relative;
 }
 
-.mikumodoro-heatmap-month-cell.empty { background-color: #ebedf0; }
+.mikumodoro-heatmap-month-cell.empty { background-color: var(--background-modifier-border); }
+.mikumodoro-heatmap-month-cell:hover { background-color: var(--background-modifier-hover) !important; }
 .mikumodoro-heatmap-month-cell.out-of-range { background-color: transparent; }
 .mikumodoro-heatmap-month-cell.future {
 	background-color: transparent;
 	border: 1px dashed var(--background-modifier-border);
+}
+
+.mikumodoro-heatmap-month-cell.future:hover {
+	background-color: var(--background-modifier-hover);
 }
 .mikumodoro-heatmap-month-cell.today {
 	outline: 2px solid var(--interactive-accent);
@@ -680,16 +730,7 @@
 	color: var(--text-muted);
 }
 
-/* Dark theme */
-.theme-dark .mikumodoro-heatmap-cell.empty,
-.theme-dark .mikumodoro-heatmap-month-cell.empty {
-	background-color: #2d333b;
-}
-
-.theme-dark .mikumodoro-heatmap-cell.future,
-.theme-dark .mikumodoro-heatmap-month-cell.future {
-	border-color: var(--background-modifier-border);
-}
+/* Dark theme - handled by CSS variables now */
 
 /* Project headers in task list */
 .mikumodoro-project-header {
@@ -787,7 +828,6 @@
 	margin-top: 16px;
 	position: sticky;
 	bottom: 0;
-	background: var(--background-primary);
 }
 
 .mikumodoro-bottom-btn {

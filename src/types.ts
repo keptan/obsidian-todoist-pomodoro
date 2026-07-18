@@ -7,6 +7,7 @@ export interface MikumodoroSettings {
 	heatmapViewMode: 'year' | 'month';
 	soundEnabled: boolean;
 	notificationsEnabled: boolean;
+	sessionsHeight: number;
 }
 
 export const DEFAULT_SETTINGS: MikumodoroSettings = {
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS: MikumodoroSettings = {
 	heatmapViewMode: 'year',
 	soundEnabled: true,
 	notificationsEnabled: true,
+	sessionsHeight: 0,
 };
 
 export interface TodoistTask {
