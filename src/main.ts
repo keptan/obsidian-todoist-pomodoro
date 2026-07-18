@@ -24,6 +24,28 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private completionMap: CompletionMap = {};
 	private customActivityLabels: string[] = [];
 	private heatmapElements: Set<HTMLElement> = new Set();
+	private saveTimer: number | null = null;
+	private savePending = false;
+
+	private scheduleSave(delayMs = 2000) {
+		this.savePending = true;
+		if (this.saveTimer !== null) return;
+		this.saveTimer = window.setTimeout(() => {
+			this.saveTimer = null;
+			this.savePending = false;
+			this.savePluginData();
+		}, delayMs);
+	}
+
+	private startPeriodicSave() {
+		// Save every 60s while timer is active
+		return this.registerInterval(window.setInterval(() => {
+			const state = this.timerEngine.getState();
+			if (state.mode === 'working' || state.mode === 'break' || state.mode === 'paused') {
+				this.scheduleSave(0);
+			}
+		}, 60 * 1000));
+	}
 
 	async onload() {
 		await this.loadSettings();
@@ -50,6 +72,11 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		if (savedData?.customActivityLabels) {
 			this.customActivityLabels = savedData.customActivityLabels;
 		}
+
+		// Save on state changes (start, pause, resume, stop, session complete)
+		this.timerEngine.onStateChange(() => {
+			this.scheduleSave();
+		});
 
 		// Save sessions when one completes
 		this.timerEngine.setOnSessionComplete(() => {
@@ -158,6 +185,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		}, 5 * 60 * 1000));
 
+		// Periodic save while timer is active
+		this.startPeriodicSave();
+
 		// Request notification permission if enabled
 		if (this.settings.notificationsEnabled && 'Notification' in window) {
 			Notification.requestPermission();
@@ -165,6 +195,15 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	}
 
 	async onunload() {
+		// Flush any pending save before destroying
+		if (this.saveTimer !== null) {
+			window.clearTimeout(this.saveTimer);
+			this.saveTimer = null;
+		}
+		if (this.savePending) {
+			await this.savePluginData();
+			this.savePending = false;
+		}
 		this.timerEngine.destroy();
 	}
 
