@@ -18,6 +18,7 @@ export class TimerEngine {
 	private sessions: PomodoroSession[] = [];
 	private onSessionComplete?: (session: PomodoroSession) => void;
 	private onBreakStart?: () => void;
+	private breakDurationMs = 0;
 
 	constructor(settings: MikumodoroSettings) {
 		this.settings = settings;
@@ -50,6 +51,23 @@ export class TimerEngine {
 			if (this.state.startTime) {
 				this.state.elapsedMs = Date.now() - this.state.startTime;
 				this.notify();
+
+				// Auto-complete work session when duration is reached
+				if (this.state.mode === 'working') {
+					const workMs = this.settings.defaultWorkMinutes * 60000;
+					if (this.state.elapsedMs >= workMs) {
+						this.startBreak();
+						return;
+					}
+				}
+
+				if (this.state.mode === 'break' && this.breakDurationMs > 0) {
+					if (this.state.elapsedMs >= this.breakDurationMs) {
+						new Notice('Mikumodoro: Break over! Ready for the next session? (≧▽≦)');
+						this.stop();
+						return;
+					}
+				}
 			}
 		}
 	}
@@ -120,6 +138,7 @@ export class TimerEngine {
 
 		const workMs = this.state.startTime ? Date.now() - this.state.startTime : this.settings.defaultWorkMinutes * 60000;
 		const breakMs = workMs / this.settings.breakRatio;
+		this.breakDurationMs = breakMs;
 
 		this.state = {
 			mode: 'break',
@@ -160,6 +179,8 @@ export class TimerEngine {
 				this.onSessionComplete?.(session);
 			}
 		}
+
+		this.breakDurationMs = 0;
 
 		this.state = {
 			mode: 'idle',
