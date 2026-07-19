@@ -26,6 +26,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private heatmapElements: Set<HTMLElement> = new Set();
 	private saveTimer: number | null = null;
 	private savePending = false;
+	private lastDataSignature = '';
 
 	private scheduleSave(delayMs = 2000) {
 		this.savePending = true;
@@ -87,6 +88,11 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		// Break start callback: play chime + notification
 		this.timerEngine.setOnBreakStart(() => {
 			this.onBreakStart();
+		});
+
+		// Break end callback: play chime + notification
+		this.timerEngine.setOnBreakEnd(() => {
+			this.onBreakEnd();
 		});
 
 		// Register the timer view
@@ -188,10 +194,26 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		// Periodic save while timer is active
 		this.startPeriodicSave();
 
-		// Periodic data reload from disk + heatmap refresh
+		// Periodic data reload from disk (only refresh views if data changed)
 		this.registerInterval(window.setInterval(() => {
 			this.reloadFromDisk();
 		}, 60000));
+
+		// Auto-fetch completed history on boot if we don't have it yet
+		if (this.settings.todoistApiToken) {
+			const hasHistory = Object.keys(this.completionMap).length > 0;
+			if (!hasHistory) {
+				console.log('Mikumodoro: No completion history found, fetching from Todoist...');
+				this.syncCompletedHistory().catch(err => {
+					console.error('Mikumodoro: Auto history fetch failed', err);
+				});
+			} else {
+				// Still sync on boot for safekeeping (merge new completions)
+				this.syncCompletedHistory().catch(err => {
+					console.error('Mikumodoro: Boot history sync failed', err);
+				});
+			}
+		}
 
 		// Request notification permission if enabled
 		if (this.settings.notificationsEnabled && 'Notification' in window) {
@@ -365,6 +387,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 			await this.savePluginData();
 			console.log(`Mikumodoro: Synced ${count} completed tasks`);
+			this.lastDataSignature = ''; // force heatmap refresh
 			this.refreshHeatmaps();
 		} catch (err) {
 			console.error('Mikumodoro: Failed to sync completed history', err);
@@ -498,6 +521,20 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 	}
 
+	private onBreakEnd() {
+		if (this.settings.soundEnabled) {
+			this.playChime();
+		}
+		if (this.settings.notificationsEnabled && 'Notification' in window) {
+			if (Notification.permission === 'granted') {
+				new Notification('Mikumodoro', {
+					body: 'Break over! Back to work! (｡•̀ᴗ-)✧',
+					icon: '🍅',
+				});
+			}
+		}
+	}
+
 	private playChime() {
 		try {
 			// Use Web Audio API to generate a pleasant chime
@@ -540,10 +577,19 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	}
 
 	refreshHeatmaps() {
+		const sessions = this.timerEngine.getSessions();
+		const completions = this.getCompletionMap();
+		const tasks = this.cachedTasks;
+		const sig = `${sessions.length}|${sessions[sessions.length-1]?.id ?? ''}|${Object.keys(completions).length}|${tasks.length}`;
+		if (sig === this.lastDataSignature) {
+			// Data unchanged, skip re-render
+			return;
+		}
+		this.lastDataSignature = sig;
 		for (const el of this.heatmapElements) {
 			if (el.isConnected) {
 				el.empty();
-				renderHeatmap(el, this.timerEngine.getSessions(), this.settings, this);
+				renderHeatmap(el, sessions, this.settings, this);
 			} else {
 				this.heatmapElements.delete(el);
 			}
@@ -552,20 +598,36 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	async reloadFromDisk() {
 		const data = await this.loadData();
+		let changed = false;
 		if (data?.sessions) {
 			const state = this.timerEngine.getState();
 			if (state.mode === 'idle') {
-				this.timerEngine.loadSessions(data.sessions);
+				const currentSessions = this.timerEngine.getSessions();
+				if (data.sessions.length !== currentSessions.length ||
+					(data.sessions.length > 0 && data.sessions[data.sessions.length-1]?.id !== currentSessions[currentSessions.length-1]?.id)) {
+					this.timerEngine.loadSessions(data.sessions);
+					changed = true;
+				}
 			}
 		}
 		if (data?.completions) {
-			this.completionMap = data.completions;
+			const newKeys = Object.keys(data.completions).length;
+			const oldKeys = Object.keys(this.completionMap).length;
+			if (newKeys !== oldKeys) {
+				this.completionMap = data.completions;
+				changed = true;
+			}
 		}
 		if (data?.customActivityLabels) {
-			this.customActivityLabels = data.customActivityLabels;
+			if (data.customActivityLabels.length !== this.customActivityLabels.length) {
+				this.customActivityLabels = data.customActivityLabels;
+				changed = true;
+			}
 		}
-		this.refreshHeatmaps();
-		this.refreshViews();
+		if (changed) {
+			this.refreshHeatmaps();
+			this.refreshViews();
+		}
 	}
 
 	refreshViews() {

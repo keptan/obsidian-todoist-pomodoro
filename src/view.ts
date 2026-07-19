@@ -140,6 +140,14 @@ export class TimerView extends ItemView {
 			skipBtn.addEventListener('click', () => {
 				this.plugin.timerEngine.stop();
 			});
+
+			const extendBtn = controls.createEl('button', {
+				cls: 'mikumodoro-btn mikumodoro-btn-secondary',
+				text: '🏋️ Double Break',
+			});
+			extendBtn.addEventListener('click', () => {
+				this.plugin.timerEngine.extendBreak(2);
+			});
 		} else if (state.mode === 'paused') {
 			const resumeBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-primary',

@@ -167,27 +167,6 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Pull historical completed tasks
-		new Setting(containerEl)
-			.setName('Sync completed task history')
-			.setDesc('Pull completed task history from Todoist for the heatmap completion counts. This may take a moment.')
-			.addButton((btn) =>
-				btn
-					.setButtonText('Sync History')
-					.onClick(async () => {
-						btn.setButtonText('Syncing...');
-						btn.setDisabled(true);
-						try {
-							await this.plugin.syncCompletedHistory();
-							new Notice('Completed task history synced!');
-						} catch {
-							new Notice('Failed to sync history. Check console.');
-						}
-						btn.setButtonText('Sync History');
-						btn.setDisabled(false);
-					})
-			);
-
 		// Reset button
 		new Setting(containerEl)
 			.setName('Reset settings')

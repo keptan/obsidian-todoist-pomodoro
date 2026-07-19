@@ -18,6 +18,7 @@ export class TimerEngine {
 	private sessions: PomodoroSession[] = [];
 	private onSessionComplete?: (session: PomodoroSession) => void;
 	private onBreakStart?: () => void;
+	private onBreakEnd?: () => void;
 	private breakDurationMs = 0;
 
 	constructor(settings: MikumodoroSettings) {
@@ -38,6 +39,10 @@ export class TimerEngine {
 
 	setOnBreakStart(cb: () => void) {
 		this.onBreakStart = cb;
+	}
+
+	setOnBreakEnd(cb: () => void) {
+		this.onBreakEnd = cb;
 	}
 
 	private notify() {
@@ -63,6 +68,7 @@ export class TimerEngine {
 
 				if (this.state.mode === 'break' && this.breakDurationMs > 0) {
 					if (this.state.elapsedMs >= this.breakDurationMs) {
+						this.onBreakEnd?.();
 						new Notice('Mikumodoro: Break over! Ready for the next session? (≧▽≦)');
 						this.stop();
 						return;
@@ -156,6 +162,14 @@ export class TimerEngine {
 
 		const breakMin = Math.round(breakMs / 60000);
 		new Notice(`Mikumodoro: Break for ~${breakMin} minutes`);
+	}
+
+	extendBreak(multiplier: number) {
+		if (this.state.mode !== 'break') return;
+		this.breakDurationMs = Math.round(this.breakDurationMs * multiplier);
+		this.notify();
+		const remainMin = Math.round((this.breakDurationMs - this.state.elapsedMs) / 60000);
+		new Notice(`Mikumodoro: Break extended! ~${remainMin} min remaining`);
 	}
 
 	stop() {
