@@ -108,7 +108,14 @@
 .mikumodoro-btn-stop { background: #ef4444; color: white; }
 
 /* Task Selector */
-.mikumodoro-task-selector { padding: 12px 0; flex: 1; overflow-y: auto; }
+.mikumodoro-task-selector {
+	padding: 12px 0;
+	flex: 1;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
 
 .mikumodoro-task-selector-header {
 	display: flex;
@@ -150,7 +157,7 @@
 }
 
 .mikumodoro-task-list {
-	max-height: 400px;
+	flex: 1;
 	overflow-y: auto;
 }
 
@@ -634,13 +641,10 @@
 	outline-offset: 1px;
 }
 
-/* Tooltip hover */
-.mikumodoro-heatmap-cell.has-tooltip:hover::after {
-	content: attr(data-tooltip);
-	position: absolute;
-	bottom: calc(100% + 6px);
-	left: 50%;
-	transform: translateX(-50%);
+/* Tooltip - floating element appended to body, not clipped by overflow */
+.mikumodoro-heatmap-tooltip {
+	position: fixed;
+	display: none;
 	background: var(--background-primary-alt);
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 4px;
@@ -650,7 +654,7 @@
 	max-width: 280px;
 	overflow: hidden;
 	pointer-events: none;
-	z-index: 100;
+	z-index: 10000;
 	color: var(--text-normal);
 	box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
@@ -712,25 +716,7 @@
 	color: var(--text-muted);
 }
 
-.mikumodoro-heatmap-month-cell.has-tooltip:hover::after {
-	content: attr(data-tooltip);
-	position: absolute;
-	bottom: calc(100% + 6px);
-	left: 50%;
-	transform: translateX(-50%);
-	background: var(--background-primary-alt);
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 4px;
-	padding: 4px 8px;
-	font-size: 0.75em;
-	white-space: pre;
-	max-width: 280px;
-	overflow: hidden;
-	pointer-events: none;
-	z-index: 100;
-	color: var(--text-normal);
-	box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-}
+
 
 /* Legend */
 .mikumodoro-heatmap-legend {

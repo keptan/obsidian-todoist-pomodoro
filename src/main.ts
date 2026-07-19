@@ -188,6 +188,11 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		// Periodic save while timer is active
 		this.startPeriodicSave();
 
+		// Periodic data reload from disk + heatmap refresh
+		this.registerInterval(window.setInterval(() => {
+			this.reloadFromDisk();
+		}, 60000));
+
 		// Request notification permission if enabled
 		if (this.settings.notificationsEnabled && 'Notification' in window) {
 			Notification.requestPermission();
@@ -410,6 +415,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 		await this.savePluginData();
 		this.refreshHeatmaps();
+		this.refreshViews();
 	}
 
 	// Get tasks that are due on a specific date (YYYY-MM-DD)
@@ -540,6 +546,33 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				renderHeatmap(el, this.timerEngine.getSessions(), this.settings, this);
 			} else {
 				this.heatmapElements.delete(el);
+			}
+		}
+	}
+
+	async reloadFromDisk() {
+		const data = await this.loadData();
+		if (data?.sessions) {
+			const state = this.timerEngine.getState();
+			if (state.mode === 'idle') {
+				this.timerEngine.loadSessions(data.sessions);
+			}
+		}
+		if (data?.completions) {
+			this.completionMap = data.completions;
+		}
+		if (data?.customActivityLabels) {
+			this.customActivityLabels = data.customActivityLabels;
+		}
+		this.refreshHeatmaps();
+		this.refreshViews();
+	}
+
+	refreshViews() {
+		for (const leaf of this.app.workspace.getLeavesOfType(TIMER_VIEW_TYPE)) {
+			const view = leaf.view;
+			if (view instanceof TimerView) {
+				view.refresh();
 			}
 		}
 	}

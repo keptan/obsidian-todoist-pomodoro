@@ -10,6 +10,7 @@ export class TimerView extends ItemView {
 	private renderBound: () => void;
 	private expandedTasks: Set<string> = new Set();
 	private expandedProjects: Set<string> = new Set();
+	private lastRenderDate: string = '';
 
 	constructor(leaf: WorkspaceLeaf, plugin: MikumodoroTimerPlugin) {
 		super(leaf);
@@ -32,15 +33,28 @@ export class TimerView extends ItemView {
 	async onOpen() {
 		this.plugin.timerEngine.onStateChange(this.renderBound);
 		this.render();
+
+		// Periodic re-render for day rollover
+		this.registerInterval(window.setInterval(() => {
+			const today = new Date().toISOString().slice(0, 10);
+			if (today !== this.lastRenderDate) {
+				this.render();
+			}
+		}, 30000));
 	}
 
 	onClose(): Promise<void> {
 		return Promise.resolve();
 	}
 
+	refresh() {
+		this.render();
+	}
+
 	private render() {
 		const { containerEl } = this;
 		containerEl.empty();
+		this.lastRenderDate = new Date().toISOString().slice(0, 10);
 
 		const state = this.plugin.timerEngine.getState();
 
@@ -1098,8 +1112,6 @@ export class TimerView extends ItemView {
 			.getSessions()
 			.filter((s) => new Date(s.startTime).toISOString().slice(0, 10) === today);
 
-		if (todaySessions.length === 0) return;
-
 		const section = container.createEl('div', { cls: 'mikumodoro-sessions-section' });
 
 		// Resize handle at top
@@ -1155,6 +1167,15 @@ export class TimerView extends ItemView {
 		section.createEl('div', { text: 'Today\'s Sessions', cls: 'mikumodoro-section-label' });
 
 		const list = section.createEl('div', { cls: 'mikumodoro-sessions-list' });
+
+		if (todaySessions.length === 0) {
+			list.createEl('div', {
+				cls: 'mikumodoro-session-total',
+				text: 'No sessions yet today',
+			});
+			return;
+		}
+
 		const totalMin = todaySessions.reduce((a, s) => a + s.durationMinutes, 0);
 		list.createEl('div', {
 			cls: 'mikumodoro-session-total',

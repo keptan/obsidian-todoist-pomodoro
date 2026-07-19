@@ -135,6 +135,7 @@ export function renderHeatmap(
 	}
 
 	render();
+	attachTooltips(container);
 }
 
 function renderYearView(
@@ -363,6 +364,46 @@ function buildTooltip(
 		lines.push(extras.join(' - '));
 	}
 	return lines.join('\n');
+}
+
+function attachTooltips(container: HTMLElement) {
+	if (container.dataset.tooltipsAttached) return;
+	container.dataset.tooltipsAttached = '1';
+
+	let tooltipEl = document.body.querySelector('.mikumodoro-heatmap-tooltip') as HTMLElement | null;
+	if (!tooltipEl) {
+		tooltipEl = document.createElement('div');
+		tooltipEl.className = 'mikumodoro-heatmap-tooltip';
+		document.body.appendChild(tooltipEl);
+	}
+
+	const show = (target: HTMLElement) => {
+		const text = target.getAttribute('data-tooltip');
+		if (!text) return;
+		tooltipEl!.textContent = text;
+		tooltipEl!.style.display = 'block';
+		const rect = target.getBoundingClientRect();
+		const tipRect = tooltipEl!.getBoundingClientRect();
+		let left = rect.left + rect.width / 2 - tipRect.width / 2;
+		let top = rect.top - tipRect.height - 6;
+		left = Math.max(4, Math.min(left, window.innerWidth - tipRect.width - 4));
+		if (top < 4) top = rect.bottom + 6;
+		tooltipEl!.style.left = `${left}px`;
+		tooltipEl!.style.top = `${top}px`;
+	};
+
+	container.addEventListener('mouseover', (e) => {
+		const target = (e.target as HTMLElement).closest('.has-tooltip') as HTMLElement | null;
+		if (target) {
+			show(target);
+		} else {
+			tooltipEl!.style.display = 'none';
+		}
+	});
+
+	container.addEventListener('mouseleave', () => {
+		tooltipEl!.style.display = 'none';
+	});
 }
 
 function renderLegend(container: HTMLElement, settings: MikumodoroSettings) {
