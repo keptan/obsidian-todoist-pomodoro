@@ -598,35 +598,70 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	async reloadFromDisk() {
 		const data = await this.loadData();
+		if (!data) return;
 		let changed = false;
-		if (data?.sessions) {
-			const state = this.timerEngine.getState();
-			if (state.mode === 'idle') {
-				const currentSessions = this.timerEngine.getSessions();
-				if (data.sessions.length !== currentSessions.length ||
-					(data.sessions.length > 0 && data.sessions[data.sessions.length-1]?.id !== currentSessions[currentSessions.length-1]?.id)) {
-					this.timerEngine.loadSessions(data.sessions);
+
+		// --- Sessions: merge by ID, works even during active timer ---
+		if (data.sessions && Array.isArray(data.sessions)) {
+			const currentSessions = this.timerEngine.getSessions();
+			const currentIds = new Set(currentSessions.map(s => s.id));
+			const newSessions = data.sessions.filter((s: PomodoroSession) => !currentIds.has(s.id));
+			if (newSessions.length > 0) {
+				// Use merge (safe during active timer) instead of load (which replaces)
+				this.timerEngine.mergeSessions(data.sessions);
+				changed = true;
+			}
+		}
+
+		// --- Completions: deep merge by date + taskId ---
+		if (data.completions && typeof data.completions === 'object') {
+			const diskCompletions = data.completions as CompletionMap;
+			for (const dateStr of Object.keys(diskCompletions)) {
+				const diskRecords = diskCompletions[dateStr] ?? [];
+				const localRecords = this.completionMap[dateStr] ?? [];
+				const localTaskIds = new Set(localRecords.map(r => r.taskId));
+				for (const rec of diskRecords) {
+					if (!localTaskIds.has(rec.taskId)) {
+						if (!this.completionMap[dateStr]) {
+							this.completionMap[dateStr] = [];
+						}
+						this.completionMap[dateStr].push(rec);
+						changed = true;
+					}
+				}
+			}
+		}
+
+		// --- Task notes: deep merge by taskId ---
+		if (data.taskNotes && typeof data.taskNotes === 'object') {
+			const diskNotes = data.taskNotes as TaskNoteMap;
+			for (const taskId of Object.keys(diskNotes)) {
+				const diskPath = diskNotes[taskId];
+				if (diskPath && this.taskNoteMap[taskId] !== diskPath) {
+					this.taskNoteMap[taskId] = diskPath;
 					changed = true;
 				}
 			}
 		}
-		if (data?.completions) {
-			const newKeys = Object.keys(data.completions).length;
-			const oldKeys = Object.keys(this.completionMap).length;
-			if (newKeys !== oldKeys) {
-				this.completionMap = data.completions;
-				changed = true;
+
+		// --- Custom activity labels: merge by value ---
+		if (data.customActivityLabels && Array.isArray(data.customActivityLabels)) {
+			const diskLabels = data.customActivityLabels as string[];
+			for (const label of diskLabels) {
+				if (!this.customActivityLabels.includes(label)) {
+					this.customActivityLabels.push(label);
+					changed = true;
+				}
 			}
 		}
-		if (data?.customActivityLabels) {
-			if (data.customActivityLabels.length !== this.customActivityLabels.length) {
-				this.customActivityLabels = data.customActivityLabels;
-				changed = true;
-			}
-		}
+
 		if (changed) {
+			this.lastDataSignature = ''; // force heatmap refresh
 			this.refreshHeatmaps();
 			this.refreshViews();
+			// Persist merged data back to disk so the other device's writes
+			// aren't lost on the next save from this device
+			this.scheduleSave(1000);
 		}
 	}
 

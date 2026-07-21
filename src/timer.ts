@@ -20,6 +20,7 @@ export class TimerEngine {
 	private onBreakStart?: () => void;
 	private onBreakEnd?: () => void;
 	private breakDurationMs = 0;
+	private accumulatedBreakMs = 0;
 
 	constructor(settings: MikumodoroSettings) {
 		this.settings = settings;
@@ -143,7 +144,9 @@ export class TimerEngine {
 		}
 
 		const workMs = this.state.startTime ? Date.now() - this.state.startTime : this.settings.defaultWorkMinutes * 60000;
-		const breakMs = workMs / this.settings.breakRatio;
+		let breakMs = workMs / this.settings.breakRatio;
+		breakMs += this.accumulatedBreakMs;
+		this.accumulatedBreakMs = 0;
 		this.breakDurationMs = breakMs;
 
 		this.state = {
@@ -172,6 +175,28 @@ export class TimerEngine {
 		new Notice(`Mikumodoro: Break extended! ~${remainMin} min remaining`);
 	}
 
+	skipBreak() {
+		if (this.state.mode !== 'break') return;
+
+		const remainingBreakMs = Math.max(0, this.breakDurationMs - this.state.elapsedMs);
+		this.accumulatedBreakMs += remainingBreakMs;
+
+		this.state = {
+			mode: 'working',
+			task: this.state.task,
+			startTime: Date.now(),
+			elapsedMs: 0,
+			pausedAt: null,
+		};
+		this.breakDurationMs = 0;
+		this.startInterval();
+		this.notify();
+
+		const taskName = this.state.task ? this.state.task.content : 'No task';
+		const extraMin = Math.round(remainingBreakMs / 60000);
+		new Notice(`Mikumodoro: Skipped break! +${extraMin}m added to next break. Back to "${taskName}" (≧▽≦)`);
+	}
+
 	stop() {
 		this.stopInterval();
 
@@ -195,6 +220,7 @@ export class TimerEngine {
 		}
 
 		this.breakDurationMs = 0;
+		this.accumulatedBreakMs = 0;
 
 		this.state = {
 			mode: 'idle',
@@ -239,6 +265,20 @@ export class TimerEngine {
 
 	loadSessions(sessions: PomodoroSession[]) {
 		this.sessions = [...sessions];
+	}
+
+	/**
+	 * Merge sessions from disk into local sessions by ID.
+	 * Only adds sessions that don't already exist locally.
+	 * Safe to call during an active timer (doesn't touch timer state).
+	 */
+	mergeSessions(newSessions: PomodoroSession[]) {
+		const existingIds = new Set(this.sessions.map(s => s.id));
+		for (const s of newSessions) {
+			if (!existingIds.has(s.id)) {
+				this.sessions.push(s);
+			}
+		}
 	}
 
 	addManualSession(session: PomodoroSession) {

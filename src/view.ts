@@ -138,7 +138,7 @@ export class TimerView extends ItemView {
 				text: 'Skip Break',
 			});
 			skipBtn.addEventListener('click', () => {
-				this.plugin.timerEngine.stop();
+				this.plugin.timerEngine.skipBreak();
 			});
 
 			const extendBtn = controls.createEl('button', {
