@@ -19,3 +19,16 @@ export function formatDate(timestamp: number): string {
 		day: 'numeric',
 	});
 }
+
+/**
+ * Returns a local-date string in YYYY-MM-DD format.
+ * Uses getFullYear/getMonth/getDate so it respects the user's timezone,
+ * unlike toISOString().slice(0, 10) which converts to UTC first.
+ */
+export function formatLocalDate(date: Date | number): string {
+	const d = typeof date === 'number' ? new Date(date) : date;
+	const y = d.getFullYear();
+	const m = String(d.getMonth() + 1).padStart(2, '0');
+	const day = String(d.getDate()).padStart(2, '0');
+	return `${y}-${m}-${day}`;
+}

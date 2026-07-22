@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, Notice, Modal, setIcon } from 'obsidian';
 import type MikumodoroTimerPlugin from './main';
 import type { TodoistTask } from './types';
-import { formatTimerDisplay } from './utils';
+import { formatTimerDisplay, formatLocalDate } from './utils';
 
 export const TIMER_VIEW_TYPE = 'obsidian-todoist-pomodoro-view';
 
@@ -36,7 +36,7 @@ export class TimerView extends ItemView {
 
 		// Periodic re-render for day rollover
 		this.registerInterval(window.setInterval(() => {
-			const today = new Date().toISOString().slice(0, 10);
+			const today = formatLocalDate(new Date());
 			if (today !== this.lastRenderDate) {
 				this.render();
 			}
@@ -54,7 +54,7 @@ export class TimerView extends ItemView {
 	private render() {
 		const { containerEl } = this;
 		containerEl.empty();
-		this.lastRenderDate = new Date().toISOString().slice(0, 10);
+		this.lastRenderDate = formatLocalDate(new Date());
 
 		const state = this.plugin.timerEngine.getState();
 
@@ -1087,7 +1087,7 @@ export class TimerView extends ItemView {
 			type: 'date',
 			cls: 'mikumodoro-log-date-input',
 		});
-		const todayStr = new Date().toISOString().slice(0, 10);
+		const todayStr = formatLocalDate(new Date());
 		dateInput.value = todayStr;
 
 		const addBtn = modal.contentEl.createEl('button', {
@@ -1115,10 +1115,10 @@ export class TimerView extends ItemView {
 	}
 
 	private renderSessionsList(container: HTMLElement) {
-		const today = new Date().toISOString().slice(0, 10);
+		const today = formatLocalDate(new Date());
 		const todaySessions = this.plugin.timerEngine
 			.getSessions()
-			.filter((s) => new Date(s.startTime).toISOString().slice(0, 10) === today);
+			.filter((s) => formatLocalDate(new Date(s.startTime)) === today);
 
 		const section = container.createEl('div', { cls: 'mikumodoro-sessions-section' });
 

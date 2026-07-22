@@ -1,5 +1,6 @@
 import type { PomodoroSession, MikumodoroSettings } from './types';
 import type MikumodoroTimerPlugin from './main';
+import { formatLocalDate } from './utils';
 
 interface TaskMinutesEntry {
 	taskContent: string;
@@ -57,7 +58,7 @@ export function renderHeatmap(
 		const values: number[] = [];
 		const d = new Date(startDate);
 		while (d <= endDate) {
-			const key = d.toISOString().slice(0, 10);
+			const key = formatLocalDate(d);
 			const val = dayMap.get(key) ?? 0;
 			if (val > 0) values.push(val);
 			d.setDate(d.getDate() + 1);
@@ -203,11 +204,11 @@ function renderYearView(
 			date.setDate(cursor.getDate() + d);
 
 			const isInYear = date.getFullYear() === year;
-			const dateStr = date.toISOString().slice(0, 10);
+			const dateStr = formatLocalDate(date);
 			const minutes = dayMap.get(dateStr) ?? 0;
 			const completions = completionMap[dateStr]?.length ?? 0;
 			const isFuture = date > today;
-			const isToday = dateStr === today.toISOString().slice(0, 10);
+			const isToday = dateStr === formatLocalDate(today);
 			const hasDue = dueDateSet.has(dateStr);
 
 			const cell = weekCol.createEl('div', { cls: 'mikumodoro-heatmap-cell' });
@@ -285,11 +286,11 @@ function renderMonthView(
 
 	for (let day = 1; day <= monthEnd.getDate(); day++) {
 		const date = new Date(year, month, day);
-		const dateStr = date.toISOString().slice(0, 10);
+		const dateStr = formatLocalDate(date);
 		const minutes = dayMap.get(dateStr) ?? 0;
 		const completions = completionMap[dateStr]?.length ?? 0;
 		const isFuture = date > today;
-		const isToday = dateStr === today.toISOString().slice(0, 10);
+		const isToday = dateStr === formatLocalDate(today);
 		const hasDue = dueDateSet.has(dateStr);
 
 		const cell = calGrid.createEl('div', { cls: 'mikumodoro-heatmap-month-cell' });
@@ -425,7 +426,7 @@ function sumMinutesInRange(dayMap: Map<string, number>, start: Date, end: Date):
 	let total = 0;
 	const d = new Date(start);
 	while (d <= end) {
-		const key = d.toISOString().slice(0, 10);
+		const key = formatLocalDate(d);
 		total += dayMap.get(key) ?? 0;
 		d.setDate(d.getDate() + 1);
 	}
