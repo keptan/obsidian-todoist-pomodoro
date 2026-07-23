@@ -21,6 +21,7 @@ export class TimerEngine {
 	private onBreakEnd?: () => void;
 	private breakDurationMs = 0;
 	private accumulatedBreakMs = 0;
+	private breakExtended = false;
 
 	constructor(settings: MikumodoroSettings) {
 		this.settings = settings;
@@ -148,6 +149,7 @@ export class TimerEngine {
 		breakMs += this.accumulatedBreakMs;
 		this.accumulatedBreakMs = 0;
 		this.breakDurationMs = breakMs;
+		this.breakExtended = false;
 
 		this.state = {
 			mode: 'break',
@@ -169,6 +171,8 @@ export class TimerEngine {
 
 	extendBreak(multiplier: number) {
 		if (this.state.mode !== 'break') return;
+		if (this.breakExtended) return; // already extended, ignore
+		this.breakExtended = true;
 		this.breakDurationMs = Math.round(this.breakDurationMs * multiplier);
 		this.notify();
 		const remainMin = Math.round((this.breakDurationMs - this.state.elapsedMs) / 60000);
@@ -221,6 +225,7 @@ export class TimerEngine {
 
 		this.breakDurationMs = 0;
 		this.accumulatedBreakMs = 0;
+		this.breakExtended = false;
 
 		this.state = {
 			mode: 'idle',
@@ -291,6 +296,15 @@ export class TimerEngine {
 			return Date.now() - this.state.startTime;
 		}
 		return this.state.elapsedMs;
+	}
+
+	isBreakExtended(): boolean {
+		return this.breakExtended;
+	}
+
+	getBreakRemainingMs(): number {
+		if (this.state.mode !== 'break') return 0;
+		return Math.max(0, this.breakDurationMs - this.getElapsedMs());
 	}
 
 	destroy() {

@@ -65,8 +65,13 @@ export class TimerView extends ItemView {
 		const timerRow = scrollContent.createEl('div', { cls: 'mikumodoro-timer-row' });
 
 		const timerDisplay = timerRow.createEl('div', { cls: 'mikumodoro-timer-display' });
-		const elapsedMs = this.plugin.timerEngine.getElapsedMs();
-		timerDisplay.setText(formatTimerDisplay(elapsedMs));
+		let displayMs: number;
+		if (state.mode === 'break') {
+			displayMs = this.plugin.timerEngine.getBreakRemainingMs();
+		} else {
+			displayMs = this.plugin.timerEngine.getElapsedMs();
+		}
+		timerDisplay.setText(formatTimerDisplay(displayMs));
 
 		if (state.mode === 'working') {
 			timerDisplay.classList.add('working');
@@ -145,6 +150,10 @@ export class TimerView extends ItemView {
 				cls: 'mikumodoro-btn mikumodoro-btn-secondary',
 				text: '🏋️ Double Break',
 			});
+			if (this.plugin.timerEngine.isBreakExtended()) {
+				extendBtn.disabled = true;
+				extendBtn.classList.add('mikumodoro-btn-disabled');
+			}
 			extendBtn.addEventListener('click', () => {
 				this.plugin.timerEngine.extendBreak(2);
 			});
