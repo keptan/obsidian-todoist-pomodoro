@@ -25,7 +25,7 @@ export function renderHeatmap(
 	const dayMap = new Map<string, number>();
 	const dayTaskMap = new Map<string, TaskMinutesEntry[]>();
 	for (const s of sessions) {
-		const day = new Date(s.startTime).toISOString().slice(0, 10);
+		const day = formatLocalDate(new Date(s.startTime));
 		dayMap.set(day, (dayMap.get(day) ?? 0) + s.durationMinutes);
 		if (!dayTaskMap.has(day)) dayTaskMap.set(day, []);
 		const entries = dayTaskMap.get(day)!;
