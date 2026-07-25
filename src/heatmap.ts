@@ -1,4 +1,4 @@
-import type { PomodoroSession, MikumodoroSettings } from './types';
+import type { PomodoroSession, MikumodoroSettings, CalendarEvent } from './types';
 import type MikumodoroTimerPlugin from './main';
 import { formatLocalDate } from './utils';
 
@@ -12,6 +12,7 @@ export function renderHeatmap(
 	sessions: PomodoroSession[],
 	settings: MikumodoroSettings,
 	plugin?: MikumodoroTimerPlugin,
+	calendarEvents?: Map<string, CalendarEvent[]>,
 ) {
 	container.empty();
 	container.classList.add('mikumodoro-heatmap-container');
@@ -21,7 +22,6 @@ export function renderHeatmap(
 	let currentMonth = new Date().getMonth();
 
 	// Build date -> total minutes and date -> per-task breakdown
-	// Roll up subtask sessions under their top-level parent's name
 	const dayMap = new Map<string, number>();
 	const dayTaskMap = new Map<string, TaskMinutesEntry[]>();
 	for (const s of sessions) {
@@ -29,7 +29,6 @@ export function renderHeatmap(
 		dayMap.set(day, (dayMap.get(day) ?? 0) + s.durationMinutes);
 		if (!dayTaskMap.has(day)) dayTaskMap.set(day, []);
 		const entries = dayTaskMap.get(day)!;
-		// Resolve to top-level parent name if plugin is available
 		const displayName = plugin?.getTopLevelTaskContent(s.taskId) ?? s.taskContent;
 		const existing = entries.find(e => e.taskContent === displayName);
 		if (existing) {
@@ -40,6 +39,7 @@ export function renderHeatmap(
 	}
 
 	const completionMap = plugin?.getCompletionMap() ?? {};
+	const calEvents = calendarEvents ?? new Map<string, CalendarEvent[]>();
 
 	const dueDateSet = new Set<string>();
 	const dueDateTasks = new Map<string, string[]>();
@@ -65,10 +65,8 @@ export function renderHeatmap(
 		}
 		if (values.length === 0) return 1;
 		values.sort((a, b) => a - b);
-		// Use 90th percentile as reference max so outliers don't crush the scale
 		const p90Index = Math.floor(values.length * 0.9);
 		const p90 = values[Math.min(p90Index, values.length - 1)] || 1;
-		// But never go below the actual max's 50% so colors are still visible
 		const actualMax = values[values.length - 1] ?? 1;
 		return Math.max(p90, actualMax * 0.5, 1);
 	}
@@ -114,7 +112,7 @@ export function renderHeatmap(
 				if (currentYear < today.getFullYear()) { currentYear++; slideDirection = 'left'; render(); }
 			});
 			if (currentYear >= today.getFullYear()) nextBtn.classList.add('disabled');
-			renderYearView(contentArea, currentYear, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange);
+			renderYearView(contentArea, currentYear, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange, calEvents);
 		} else {
 			const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 			labelEl.setText(`${monthNames[currentMonth]} ${currentYear}`);
@@ -131,7 +129,7 @@ export function renderHeatmap(
 			if (currentYear > today.getFullYear() || (currentYear === today.getFullYear() && currentMonth >= today.getMonth())) {
 				nextBtn.classList.add('disabled');
 			}
-			renderMonthView(contentArea, currentYear, currentMonth, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange);
+			renderMonthView(contentArea, currentYear, currentMonth, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange, calEvents);
 		}
 	}
 
@@ -150,6 +148,7 @@ function renderYearView(
 	settings: MikumodoroSettings,
 	today: Date,
 	getMax: (start: Date, end: Date) => number,
+	calEvents: Map<string, CalendarEvent[]>,
 ) {
 	const yearStart = new Date(year, 0, 1);
 	const yearEnd = new Date(year, 11, 31);
@@ -188,7 +187,6 @@ function renderYearView(
 		const firstWeekDate = new Date(cursor);
 		const prevWeekDate = new Date(cursor.getTime() - 7 * 86400000);
 		if (firstWeekDate.getMonth() !== prevWeekDate.getMonth() || currentWeek === 0) {
-			// Don't show Dec for the first week (it's from the previous year)
 			const monthIdx = firstWeekDate.getMonth();
 			if (currentWeek === 0 && monthIdx === 11) {
 				monthLabel.setText('');
@@ -210,6 +208,7 @@ function renderYearView(
 			const isFuture = date > today;
 			const isToday = dateStr === formatLocalDate(today);
 			const hasDue = dueDateSet.has(dateStr);
+			const dayCalEvents = calEvents.get(dateStr) ?? [];
 
 			const cell = weekCol.createEl('div', { cls: 'mikumodoro-heatmap-cell' });
 
@@ -224,8 +223,8 @@ function renderYearView(
 				cell.style.backgroundColor = interpolateColor(settings.heatmapColor, intensity);
 			}
 
-			if (isInYear && hasDue) {
-				cell.classList.add('has-due');
+			if (isInYear) {
+				applyCalendarBorder(cell, hasDue, dayCalEvents);
 			}
 
 			if (isInYear && !isFuture && completions > 0) {
@@ -234,7 +233,7 @@ function renderYearView(
 
 			if (isInYear) {
 				const dueTasks = dueDateTasks.get(dateStr) ?? [];
-				const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap);
+				const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap, dayCalEvents);
 				cell.setAttribute('data-tooltip', tooltipText);
 				cell.classList.add('has-tooltip');
 			}
@@ -261,6 +260,7 @@ function renderMonthView(
 	settings: MikumodoroSettings,
 	today: Date,
 	getMax: (start: Date, end: Date) => number,
+	calEvents: Map<string, CalendarEvent[]>,
 ) {
 	const monthStart = new Date(year, month, 1);
 	const monthEnd = new Date(year, month + 1, 0);
@@ -292,6 +292,7 @@ function renderMonthView(
 		const isFuture = date > today;
 		const isToday = dateStr === formatLocalDate(today);
 		const hasDue = dueDateSet.has(dateStr);
+		const dayCalEvents = calEvents.get(dateStr) ?? [];
 
 		const cell = calGrid.createEl('div', { cls: 'mikumodoro-heatmap-month-cell' });
 		cell.createEl('span', { cls: 'mikumodoro-heatmap-month-day-num', text: String(day) });
@@ -305,16 +306,14 @@ function renderMonthView(
 			cell.classList.add('empty');
 		}
 
-		if (hasDue) {
-			cell.classList.add('has-due');
-		}
+		applyCalendarBorder(cell, hasDue, dayCalEvents);
 
 		if (!isFuture && completions > 0) {
 			cell.createEl('span', { cls: 'mikumodoro-completion-badge', text: String(completions) });
 		}
 
 		const dueTasks = dueDateTasks.get(dateStr) ?? [];
-		const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap);
+		const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap, dayCalEvents);
 		cell.setAttribute('data-tooltip', tooltipText);
 		cell.classList.add('has-tooltip');
 
@@ -322,6 +321,53 @@ function renderMonthView(
 	}
 
 	renderLegend(container, settings);
+}
+
+/**
+ * Apply calendar event borders to a heatmap cell.
+ *
+ * Cases:
+ * - No calendar events, no due: no border
+ * - Calendar events only: border in averaged calendar color
+ * - Due only: border in todoist orange (existing has-due behavior)
+ * - Both calendar + due: split border, top-left = todoist orange, bottom-right = calendar color
+ */
+function applyCalendarBorder(cell: HTMLElement, hasDue: boolean, calEvents: CalendarEvent[]) {
+	const hasCalEvents = calEvents.length > 0;
+
+	if (hasDue && hasCalEvents) {
+		// Split border: top-left = todoist, bottom-right = calendar
+		const calColor = averageColors(calEvents);
+		cell.classList.add('has-due-and-cal');
+		cell.style.setProperty('--mikumodoro-cal-border-color', calColor);
+	} else if (hasCalEvents) {
+		// Calendar only: full border in averaged calendar color
+		const calColor = averageColors(calEvents);
+		cell.classList.add('has-cal');
+		cell.style.setProperty('--mikumodoro-cal-border-color', calColor);
+	} else if (hasDue) {
+		// Due only: keep existing orange box-shadow behavior
+		cell.classList.add('has-due');
+	}
+}
+
+/**
+ * Average the colors of multiple calendar events.
+ */
+function averageColors(events: CalendarEvent[]): string {
+	if (events.length === 0) return '#3b82f6';
+	if (events.length === 1) return events[0]!.calendarColor;
+	let r = 0, g = 0, b = 0;
+	for (const e of events) {
+		const hex = e.calendarColor;
+		r += parseInt(hex.slice(1, 3), 16);
+		g += parseInt(hex.slice(3, 5), 16);
+		b += parseInt(hex.slice(5, 7), 16);
+	}
+	r = Math.round(r / events.length);
+	g = Math.round(g / events.length);
+	b = Math.round(b / events.length);
+	return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 function buildTooltip(
@@ -332,6 +378,7 @@ function buildTooltip(
 	hasDue: boolean,
 	dueTasks: string[],
 	dayTaskMap: Map<string, TaskMinutesEntry[]>,
+	calEvents: CalendarEvent[],
 ): string {
 	const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 	const lines: string[] = [];
@@ -363,6 +410,18 @@ function buildTooltip(
 	}
 	if (extras.length > 0) {
 		lines.push(extras.join(' - '));
+	}
+	// Calendar events
+	if (calEvents.length > 0) {
+		lines.push(`📅 Calendar:`);
+		const shown = calEvents.slice(0, 5);
+		for (const e of shown) {
+			const name = e.summary.length > 30 ? e.summary.slice(0, 30) + '...' : e.summary;
+			lines.push(`  ${name}`);
+		}
+		if (calEvents.length > 5) {
+			lines.push(`  +${calEvents.length - 5} more events`);
+		}
 	}
 	return lines.join('\n');
 }
@@ -445,7 +504,6 @@ function interpolateColor(hex: string, intensity: number): string {
 	const r = parseInt(hex.slice(1, 3), 16);
 	const g = parseInt(hex.slice(3, 5), 16);
 	const b = parseInt(hex.slice(5, 7), 16);
-	// Parse the CSS variable for base background color
 	const baseColor = getComputedStyle(document.body).getPropertyValue('--background-modifier-border').trim();
 	let bgR = 235, bgG = 237, bgB = 240;
 	if (baseColor.startsWith('#')) {

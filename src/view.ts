@@ -1,21 +1,23 @@
 import { ItemView, WorkspaceLeaf, Notice, Modal, setIcon } from 'obsidian';
 import type MikumodoroTimerPlugin from './main';
-import type { TodoistTask } from './types';
+import type { TodoistTask, TimerState } from './types';
 import { formatTimerDisplay, formatLocalDate } from './utils';
 
 export const TIMER_VIEW_TYPE = 'obsidian-todoist-pomodoro-view';
 
 export class TimerView extends ItemView {
 	plugin: MikumodoroTimerPlugin;
-	private renderBound: () => void;
 	private expandedTasks: Set<string> = new Set();
 	private expandedProjects: Set<string> = new Set();
 	private lastRenderDate: string = '';
+	private timerDisplayEl: HTMLElement | null = null;
+	private extendBtnEl: HTMLButtonElement | null = null;
+	private lastMode: string = '';
+	private lastBreakExtended: boolean = false;
 
 	constructor(leaf: WorkspaceLeaf, plugin: MikumodoroTimerPlugin) {
 		super(leaf);
 		this.plugin = plugin;
-		this.renderBound = () => this.render();
 	}
 
 	getViewType(): string {
@@ -31,7 +33,7 @@ export class TimerView extends ItemView {
 	}
 
 	async onOpen() {
-		this.plugin.timerEngine.onStateChange(this.renderBound);
+		this.plugin.timerEngine.onStateChange((state) => this.onTimerStateChange(state));
 		this.render();
 
 		// Periodic re-render for day rollover
@@ -51,12 +53,57 @@ export class TimerView extends ItemView {
 		this.render();
 	}
 
+	/**
+	 * Lightweight state-change handler.
+	 * Only does a full re-render when the timer mode actually changes.
+	 * For same-mode ticks (e.g. every second during work/break), just updates
+	 * the timer display text in-place without rebuilding the DOM.
+	 */
+	private onTimerStateChange(state: TimerState) {
+		if (state.mode !== this.lastMode) {
+			// Mode changed (idle -> working -> break -> paused etc.) - full re-render
+			this.render();
+			return;
+		}
+
+		// Same mode - lightweight update of just the timer text
+		if (this.timerDisplayEl) {
+			let displayMs: number;
+			if (state.mode === 'break') {
+				displayMs = this.plugin.timerEngine.getBreakRemainingMs();
+			} else {
+				displayMs = this.plugin.timerEngine.getElapsedMs();
+			}
+			this.timerDisplayEl.setText(formatTimerDisplay(displayMs));
+		}
+
+		// Update break-extend button disabled state without full re-render
+		if (state.mode === 'break' && this.extendBtnEl) {
+			const isExtended = this.plugin.timerEngine.isBreakExtended();
+			if (isExtended !== this.lastBreakExtended) {
+				this.lastBreakExtended = isExtended;
+				this.extendBtnEl.disabled = isExtended;
+				if (isExtended) {
+					this.extendBtnEl.classList.add('mikumodoro-btn-disabled');
+				} else {
+					this.extendBtnEl.classList.remove('mikumodoro-btn-disabled');
+				}
+			}
+		}
+	}
+
 	private render() {
 		const { containerEl } = this;
 		containerEl.empty();
 		this.lastRenderDate = formatLocalDate(new Date());
 
+		// Reset element references (will be set as they're created)
+		this.timerDisplayEl = null;
+		this.extendBtnEl = null;
+
 		const state = this.plugin.timerEngine.getState();
+		this.lastMode = state.mode;
+		this.lastBreakExtended = this.plugin.timerEngine.isBreakExtended();
 
 		// Scrollable content area (everything except bottom actions)
 		const scrollContent = containerEl.createEl('div', { cls: 'mikumodoro-scroll-content' });
@@ -65,6 +112,7 @@ export class TimerView extends ItemView {
 		const timerRow = scrollContent.createEl('div', { cls: 'mikumodoro-timer-row' });
 
 		const timerDisplay = timerRow.createEl('div', { cls: 'mikumodoro-timer-display' });
+		this.timerDisplayEl = timerDisplay;
 		let displayMs: number;
 		if (state.mode === 'break') {
 			displayMs = this.plugin.timerEngine.getBreakRemainingMs();
@@ -149,13 +197,22 @@ export class TimerView extends ItemView {
 			const extendBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-secondary',
 				text: '🏋️ Double Break',
-			});
+			}) as HTMLButtonElement;
+			this.extendBtnEl = extendBtn;
 			if (this.plugin.timerEngine.isBreakExtended()) {
 				extendBtn.disabled = true;
 				extendBtn.classList.add('mikumodoro-btn-disabled');
 			}
 			extendBtn.addEventListener('click', () => {
 				this.plugin.timerEngine.extendBreak(2);
+			});
+
+			const stopBtn = controls.createEl('button', {
+				cls: 'mikumodoro-btn mikumodoro-btn-stop',
+				text: 'Stop',
+			});
+			stopBtn.addEventListener('click', () => {
+				this.plugin.timerEngine.stop();
 			});
 		} else if (state.mode === 'paused') {
 			const resumeBtn = controls.createEl('button', {

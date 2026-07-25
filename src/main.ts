@@ -13,7 +13,9 @@ import { TodoistClient } from './todoist';
 import { TimerEngine } from './timer';
 import { TimerView, TIMER_VIEW_TYPE } from './view';
 import { renderHeatmap } from './heatmap';
+import { GoogleCalendarClient } from './gcal';
 import { formatLocalDate } from './utils';
+import type { CalendarEvent } from './types';
 
 export default class MikumodoroTimerPlugin extends Plugin {
 	settings!: MikumodoroSettings;
@@ -29,6 +31,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private saveTimer: number | null = null;
 	private savePending = false;
 	private lastDataSignature = '';
+	private cachedCalendarEvents: Map<string, CalendarEvent[]> = new Map();
 
 	private scheduleSave(delayMs = 2000) {
 		this.savePending = true;
@@ -192,12 +195,24 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			this.refreshTasks();
 		}
 
+		// Auto-refresh calendar events on load
+		if (this.settings.calendars && this.settings.calendars.length > 0) {
+			this.refreshCalendarEvents();
+		}
+
 		// Auto-refresh tasks every 5 minutes
 		this.registerInterval(window.setInterval(() => {
 			if (this.settings.todoistApiToken) {
 				this.refreshTasks();
 			}
 		}, 5 * 60 * 1000));
+
+		// Auto-refresh calendar events every 10 minutes
+		this.registerInterval(window.setInterval(() => {
+			if (this.settings.calendars && this.settings.calendars.length > 0) {
+				this.refreshCalendarEvents();
+			}
+		}, 10 * 60 * 1000));
 
 		// Periodic save while timer is active
 		this.startPeriodicSave();
@@ -432,6 +447,40 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			console.error('Mikumodoro: Failed to fetch Todoist tasks', err);
 			this.todoistConnected = false;
 		}
+	}
+
+	// --- Calendar Events ---
+
+	async refreshCalendarEvents() {
+		if (!this.settings.calendars || this.settings.calendars.length === 0) {
+			this.cachedCalendarEvents = new Map();
+			this.refreshHeatmaps();
+			return;
+		}
+		try {
+			const maps: Map<string, CalendarEvent[]>[] = [];
+			for (const cal of this.settings.calendars) {
+				if (!cal.url) continue;
+				try {
+					const events = await GoogleCalendarClient.fetchEvents(cal);
+					maps.push(events);
+				} catch (err) {
+					console.error('Mikumodoro: Failed to fetch calendar', cal.url, err);
+				}
+			}
+			this.cachedCalendarEvents = GoogleCalendarClient.mergeCalendars(maps);
+			this.refreshHeatmaps();
+		} catch (err) {
+			console.error('Mikumodoro: Failed to refresh calendar events', err);
+		}
+	}
+
+	getCalendarEventsForDate(dateStr: string): CalendarEvent[] {
+		return this.cachedCalendarEvents.get(dateStr) ?? [];
+	}
+
+	getCachedCalendarEvents(): Map<string, CalendarEvent[]> {
+		return this.cachedCalendarEvents;
 	}
 
 	// Complete the selected task in Todoist and record completion
@@ -680,7 +729,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	private renderHeatmapBlock(el: HTMLElement, _source: string) {
 		const wrapper = el.createEl('div', { cls: 'mikumodoro-heatmap-container' });
-		renderHeatmap(wrapper, this.timerEngine.getSessions(), this.settings, this);
+		renderHeatmap(wrapper, this.timerEngine.getSessions(), this.settings, this, this.cachedCalendarEvents);
 		this.heatmapElements.add(wrapper);
 	}
 
@@ -688,7 +737,8 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		const sessions = this.timerEngine.getSessions();
 		const completions = this.getCompletionMap();
 		const tasks = this.cachedTasks;
-		const sig = `${sessions.length}|${sessions[sessions.length-1]?.id ?? ''}|${Object.keys(completions).length}|${tasks.length}`;
+		const calEvents = this.cachedCalendarEvents;
+		const sig = `${sessions.length}|${sessions[sessions.length-1]?.id ?? ''}|${Object.keys(completions).length}|${tasks.length}|${calEvents.size}`;
 		if (sig === this.lastDataSignature) {
 			// Data unchanged, skip re-render
 			return;
@@ -697,7 +747,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		for (const el of this.heatmapElements) {
 			if (el.isConnected) {
 				el.empty();
-				renderHeatmap(el, sessions, this.settings, this);
+				renderHeatmap(el, sessions, this.settings, this, calEvents);
 			} else {
 				this.heatmapElements.delete(el);
 			}

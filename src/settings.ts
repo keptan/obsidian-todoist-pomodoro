@@ -5,7 +5,8 @@ import {
 	Setting,
 } from 'obsidian';
 import type MikumodoroTimerPlugin from './main';
-import { DEFAULT_SETTINGS } from './types';
+import { DEFAULT_SETTINGS, CalendarConfig } from './types';
+import { GoogleCalendarClient } from './gcal';
 
 export class MikumodoroSettingTab extends PluginSettingTab {
 	plugin: MikumodoroTimerPlugin;
@@ -167,6 +168,14 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 					})
 			);
 
+		// --- Google Calendar section ---
+		containerEl.createEl('h3', { text: 'Google Calendar (Readonly)' });
+		const gcalDesc = containerEl.createEl('div', { cls: 'setting-item-description' });
+		gcalDesc.setText('Add public iCal/ICS URLs from Google Calendar. Events will highlight dates on the heatmap with colored borders.');
+		gcalDesc.style.marginBottom = '12px';
+
+		this.renderCalendarList(containerEl);
+
 		// Reset button
 		new Setting(containerEl)
 			.setName('Reset settings')
@@ -181,6 +190,109 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 						this.display();
 					})
 			);
+	}
+
+	private renderCalendarList(containerEl: HTMLElement) {
+		const listEl = containerEl.createEl('div', { cls: 'mikumodoro-calendar-list' });
+
+		const calendars = this.plugin.settings.calendars;
+
+		for (let idx = 0; idx < calendars.length; idx++) {
+			this.renderCalendarRow(listEl, idx);
+		}
+
+		// Always show an empty slot at the bottom for adding new calendars
+		this.renderAddCalendarRow(listEl);
+	}
+
+	private renderCalendarRow(listEl: HTMLElement, idx: number) {
+		const cal = this.plugin.settings.calendars[idx];
+		if (!cal) return;
+
+		const rowEl = listEl.createEl('div', { cls: 'mikumodoro-calendar-row' });
+
+		// URL input
+		const urlInput = rowEl.createEl('input', { type: 'text', cls: 'mikumodoro-calendar-url-input' });
+		urlInput.placeholder = 'https://calendar.google.com/calendar/ical/...';
+		urlInput.value = cal.url;
+		urlInput.addEventListener('change', async () => {
+			cal.url = urlInput.value.trim();
+			await this.plugin.saveSettings();
+		});
+
+		// Color picker
+		const colorInput = rowEl.createEl('input', { type: 'color', cls: 'mikumodoro-calendar-color-input' });
+		colorInput.value = cal.color;
+		colorInput.title = 'Border color for this calendar';
+		colorInput.addEventListener('change', async () => {
+			cal.color = colorInput.value;
+			await this.plugin.saveSettings();
+			this.plugin.refreshCalendarEvents();
+		});
+
+		// Test button
+		const testBtn = rowEl.createEl('button', { cls: 'mikumodoro-calendar-test-btn', text: 'Test' });
+		testBtn.addEventListener('click', async () => {
+			if (!cal.url) {
+				new Notice('Enter a calendar URL first');
+				return;
+			}
+			testBtn.textContent = 'Testing...';
+			testBtn.disabled = true;
+			const result = await GoogleCalendarClient.testCalendar(cal.url);
+			if (result.ok) {
+				new Notice(`Calendar OK! Found ${result.eventCount} events.`);
+			} else {
+				new Notice(`Calendar test failed: ${result.error ?? 'unknown error'}`);
+			}
+			testBtn.textContent = 'Test';
+			testBtn.disabled = false;
+		});
+
+		// Remove button
+		const removeBtn = rowEl.createEl('button', { cls: 'mikumodoro-calendar-remove-btn', text: '✕' });
+		removeBtn.title = 'Remove this calendar';
+		removeBtn.addEventListener('click', async () => {
+			this.plugin.settings.calendars.splice(idx, 1);
+			await this.plugin.saveSettings();
+			this.plugin.refreshCalendarEvents();
+			this.display();
+		});
+	}
+
+	private renderAddCalendarRow(listEl: HTMLElement) {
+		const rowEl = listEl.createEl('div', { cls: 'mikumodoro-calendar-row mikumodoro-calendar-add-row' });
+
+		const urlInput = rowEl.createEl('input', { type: 'text', cls: 'mikumodoro-calendar-url-input' });
+		urlInput.placeholder = 'Add calendar iCal URL...';
+
+		const colorInput = rowEl.createEl('input', { type: 'color', cls: 'mikumodoro-calendar-color-input' });
+		colorInput.value = '#3b82f6';
+		colorInput.title = 'Border color for this calendar';
+
+		const addBtn = rowEl.createEl('button', { cls: 'mikumodoro-calendar-add-btn', text: '+ Add' });
+		addBtn.addEventListener('click', async () => {
+			const url = urlInput.value.trim();
+			if (!url) {
+				new Notice('Enter a calendar URL first');
+				return;
+			}
+			const newCal: CalendarConfig = {
+				url,
+				color: colorInput.value,
+			};
+			this.plugin.settings.calendars.push(newCal);
+			await this.plugin.saveSettings();
+			this.plugin.refreshCalendarEvents();
+			this.display();
+		});
+
+		// Also allow pressing Enter in the URL field to add
+		urlInput.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter') {
+				addBtn.click();
+			}
+		});
 	}
 
 	private renderConnectionStatus(el: HTMLElement) {
