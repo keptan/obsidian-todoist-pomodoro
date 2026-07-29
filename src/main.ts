@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, Notice, requestUrl } from 'obsidian';
+import { Plugin, WorkspaceLeaf, Notice } from 'obsidian';
 import {
 	DEFAULT_SETTINGS,
 	MikumodoroSettings,
@@ -15,6 +15,7 @@ import { TimerView, TIMER_VIEW_TYPE } from './view';
 import { renderHeatmap } from './heatmap';
 import { GoogleCalendarClient } from './gcal';
 import { formatLocalDate } from './utils';
+import { SerializedSaveQueue } from './persistence';
 import type { CalendarEvent } from './types';
 
 export default class MikumodoroTimerPlugin extends Plugin {
@@ -29,17 +30,17 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private customActivityLabels: string[] = [];
 	private heatmapElements: Set<HTMLElement> = new Set();
 	private saveTimer: number | null = null;
-	private savePending = false;
+	private saveQueue = new SerializedSaveQueue();
 	private lastDataSignature = '';
 	private cachedCalendarEvents: Map<string, CalendarEvent[]> = new Map();
 
 	private scheduleSave(delayMs = 2000) {
-		this.savePending = true;
 		if (this.saveTimer !== null) return;
 		this.saveTimer = window.setTimeout(() => {
 			this.saveTimer = null;
-			this.savePending = false;
-			this.savePluginData();
+			void this.savePluginData().catch(err => {
+				console.error('Mikumodoro: Scheduled save failed', err);
+			});
 		}, delayMs);
 	}
 
@@ -92,7 +93,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		// Save sessions when one completes
 		this.timerEngine.setOnSessionComplete((session) => {
 			this.writePendingSession(session).catch(err => console.error('Mikumodoro: Failed to write pending session file', err));
-			this.savePluginData();
+			void this.savePluginData().catch(err => {
+				console.error('Mikumodoro: Failed to save completed session', err);
+			});
 			this.refreshHeatmaps();
 		});
 
@@ -246,14 +249,15 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	async onunload() {
 		// Flush any pending save before destroying
+		const hadScheduledSave = this.saveTimer !== null;
 		if (this.saveTimer !== null) {
 			window.clearTimeout(this.saveTimer);
 			this.saveTimer = null;
 		}
-		if (this.savePending) {
+		if (hadScheduledSave) {
 			await this.savePluginData();
-			this.savePending = false;
 		}
+		await this.saveQueue.drain();
 		this.timerEngine.destroy();
 	}
 
@@ -270,12 +274,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	}
 
 	private async savePluginData() {
-		await this.saveData({
-			...this.settings,
-			sessions: this.timerEngine.getSessions(),
-			taskNotes: this.taskNoteMap,
-			completions: this.completionMap,
-			customActivityLabels: this.customActivityLabels,
+		await this.saveQueue.enqueue(async () => {
+			await this.saveData({
+				...this.settings,
+				sessions: this.timerEngine.getSessions(),
+				taskNotes: this.taskNoteMap,
+				completions: this.completionMap,
+				customActivityLabels: this.customActivityLabels,
+			});
 		});
 	}
 
@@ -422,6 +428,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				project_name: projects[t.project_id],
 			}));
 			this.todoistConnected = true;
+			this.refreshHeatmaps();
 			return true;
 		} catch (err) {
 			console.error('Mikumodoro: Todoist connection test failed', err);
@@ -443,6 +450,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				project_name: projects[t.project_id],
 			}));
 			this.todoistConnected = true;
+			this.refreshHeatmaps();
 		} catch (err) {
 			console.error('Mikumodoro: Failed to fetch Todoist tasks', err);
 			this.todoistConnected = false;
@@ -695,9 +703,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private playChime() {
 		try {
 			// Use Web Audio API to generate a pleasant chime
-			const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
-			if (!AudioContext) return;
-			const ctx = new AudioContext();
+			const AudioContextClass = window.AudioContext
+				?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+			if (!AudioContextClass) return;
+			const ctx = new AudioContextClass();
 
 			// Play a pleasant two-tone chime
 			const notes = [
@@ -721,14 +730,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 
 			// Close context after chime finishes
-			setTimeout(() => ctx.close(), 1000);
+			window.setTimeout(() => ctx.close(), 1000);
 		} catch (err) {
 			console.error('Mikumodoro: Failed to play chime', err);
 		}
 	}
 
 	private renderHeatmapBlock(el: HTMLElement, _source: string) {
-		const wrapper = el.createEl('div', { cls: 'mikumodoro-heatmap-container' });
+		const wrapper = el.createDiv({ cls: 'mikumodoro-heatmap-container' });
 		renderHeatmap(wrapper, this.timerEngine.getSessions(), this.settings, this, this.cachedCalendarEvents);
 		this.heatmapElements.add(wrapper);
 	}
@@ -738,7 +747,22 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		const completions = this.getCompletionMap();
 		const tasks = this.cachedTasks;
 		const calEvents = this.cachedCalendarEvents;
-		const sig = `${sessions.length}|${sessions[sessions.length-1]?.id ?? ''}|${Object.keys(completions).length}|${tasks.length}|${calEvents.size}`;
+		const sessionSig = sessions
+			.map(s => `${s.id}:${s.startTime}:${s.endTime}:${s.durationMinutes}:${s.completed}`)
+			.join('|');
+		const completionSig = Object.entries(completions)
+			.sort(([a], [b]) => a.localeCompare(b))
+			.flatMap(([date, records]) => records.map(r => `${date}:${r.taskId}:${r.timestamp}:${r.taskContent}`))
+			.join('|');
+		const taskSig = tasks
+			.map(t => `${t.id}:${t.content}:${t.due?.date ?? ''}:${t.checked ?? ''}`)
+			.sort()
+			.join('|');
+		const calendarSig = Array.from(calEvents.entries())
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([date, events]) => `${date}:${events.map(e => `${e.uid}:${e.start}:${e.end}:${e.calendarColor}`).sort().join(',')}`)
+			.join('|');
+		const sig = `${sessionSig}||${completionSig}||${taskSig}||${calendarSig}`;
 		if (sig === this.lastDataSignature) {
 			// Data unchanged, skip re-render
 			return;

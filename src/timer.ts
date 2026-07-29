@@ -19,6 +19,7 @@ export class TimerEngine {
 	private onSessionComplete?: (session: PomodoroSession) => void;
 	private onBreakStart?: () => void;
 	private onBreakEnd?: () => void;
+	private pausedMode: 'working' | 'break' | null = null;
 	private breakDurationMs = 0;
 	private accumulatedBreakMs = 0;
 	private breakExtended = false;
@@ -31,8 +32,9 @@ export class TimerEngine {
 		this.settings = settings;
 	}
 
-	onStateChange(cb: TimerCallback) {
+	onStateChange(cb: TimerCallback): () => void {
 		this.callbacks.add(cb);
+		return () => this.callbacks.delete(cb);
 	}
 
 	setOnSessionComplete(cb: (session: PomodoroSession) => void) {
@@ -94,7 +96,8 @@ export class TimerEngine {
 
 	startWork(task: TodoistTask | null) {
 		// If currently working or paused, record the partial session first
-		if ((this.state.mode === 'working' || this.state.mode === 'paused') && this.state.task && this.state.startTime) {
+		const isPausedWork = this.state.mode === 'paused' && this.pausedMode === 'working';
+		if ((this.state.mode === 'working' || isPausedWork) && this.state.task && this.state.startTime) {
 			const endTime = this.state.mode === 'paused' ? (this.state.pausedAt ?? Date.now()) : Date.now();
 			const durationMin = Math.max(1, Math.round((endTime - this.state.startTime) / 60000));
 			if (durationMin >= 1) {
@@ -119,6 +122,7 @@ export class TimerEngine {
 			elapsedMs: 0,
 			pausedAt: null,
 		};
+		this.pausedMode = null;
 		this.startInterval();
 		this.notify();
 		const taskName = task ? task.content : 'No task';
@@ -158,6 +162,7 @@ export class TimerEngine {
 			elapsedMs: 0,
 			pausedAt: null,
 		};
+		this.pausedMode = null;
 
 		this.startInterval();
 		this.notify();
@@ -192,6 +197,7 @@ export class TimerEngine {
 			elapsedMs: 0,
 			pausedAt: null,
 		};
+		this.pausedMode = null;
 		this.breakDurationMs = 0;
 		this.startInterval();
 		this.notify();
@@ -205,7 +211,8 @@ export class TimerEngine {
 		this.stopInterval();
 
 		// If stopping during work or paused work, record partial session
-		if ((this.state.mode === 'working' || this.state.mode === 'paused') && this.state.task && this.state.startTime) {
+		const isPausedWork = this.state.mode === 'paused' && this.pausedMode === 'working';
+		if ((this.state.mode === 'working' || isPausedWork) && this.state.task && this.state.startTime) {
 			const endTime = this.state.mode === 'paused' ? (this.state.pausedAt ?? Date.now()) : Date.now();
 			const durationMin = Math.max(1, Math.round((endTime - this.state.startTime) / 60000));
 			if (durationMin >= 1) {
@@ -234,11 +241,13 @@ export class TimerEngine {
 			elapsedMs: 0,
 			pausedAt: null,
 		};
+		this.pausedMode = null;
 		this.notify();
 	}
 
 	pause() {
 		if (this.state.mode === 'working' || this.state.mode === 'break') {
+			this.pausedMode = this.state.mode;
 			this.state.pausedAt = Date.now();
 			this.state.mode = 'paused';
 			this.stopInterval();
@@ -251,10 +260,9 @@ export class TimerEngine {
 			const pauseDuration = Date.now() - this.state.pausedAt;
 			this.state.startTime += pauseDuration;
 			this.state.pausedAt = null;
-			// Resume into whatever mode we were in before pausing
-			// (could be working or break, but we stored 'paused' so we need to figure it out)
-			// For simplicity, resume as 'working' since that's the main use case
-			this.state.mode = 'working';
+			// Resume into the mode that was active before pausing.
+			this.state.mode = this.pausedMode ?? 'working';
+			this.pausedMode = null;
 			this.startInterval();
 			this.notify();
 		}

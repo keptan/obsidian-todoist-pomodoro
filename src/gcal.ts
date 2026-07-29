@@ -38,8 +38,12 @@ export class GoogleCalendarClient {
 			let total = 0;
 			for (const [, evts] of events) total += evts.length;
 			return { ok: true, eventCount: total };
-		} catch (err: any) {
-			return { ok: false, eventCount: 0, error: err?.message ?? 'Unknown error' };
+		} catch (err: unknown) {
+			return {
+				ok: false,
+				eventCount: 0,
+				error: err instanceof Error ? err.message : 'Unknown error',
+			};
 		}
 	}
 

@@ -58,6 +58,15 @@ npm run build # production build
 
 Requires Node.js 18+ and an Obsidian vault for testing.
 
+## Privacy and external services
+
+Mikumodoro does not include telemetry. It connects directly to Todoist when you
+configure an API token and directly to calendar providers when you add iCal
+URLs. The token, calendar URLs, session history, task-note links, and plugin
+settings are stored in Obsidian's local plugin data. If that data is included
+in Obsidian Sync or another vault-sync service, those credentials and settings
+will be copied to the devices using that service.
+
 ## License
 
 MIT

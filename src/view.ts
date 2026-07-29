@@ -14,6 +14,8 @@ export class TimerView extends ItemView {
 	private extendBtnEl: HTMLButtonElement | null = null;
 	private lastMode: string = '';
 	private lastBreakExtended: boolean = false;
+	private removeTimerStateListener: (() => void) | null = null;
+	private resizeCleanups: Array<() => void> = [];
 
 	constructor(leaf: WorkspaceLeaf, plugin: MikumodoroTimerPlugin) {
 		super(leaf);
@@ -33,7 +35,7 @@ export class TimerView extends ItemView {
 	}
 
 	async onOpen() {
-		this.plugin.timerEngine.onStateChange((state) => this.onTimerStateChange(state));
+		this.removeTimerStateListener = this.plugin.timerEngine.onStateChange((state) => this.onTimerStateChange(state));
 		this.render();
 
 		// Periodic re-render for day rollover
@@ -46,6 +48,9 @@ export class TimerView extends ItemView {
 	}
 
 	onClose(): Promise<void> {
+		this.cleanupResizeHandlers();
+		this.removeTimerStateListener?.();
+		this.removeTimerStateListener = null;
 		return Promise.resolve();
 	}
 
@@ -94,6 +99,7 @@ export class TimerView extends ItemView {
 
 	private render() {
 		const { containerEl } = this;
+		this.cleanupResizeHandlers();
 		containerEl.empty();
 		this.lastRenderDate = formatLocalDate(new Date());
 
@@ -106,12 +112,12 @@ export class TimerView extends ItemView {
 		this.lastBreakExtended = this.plugin.timerEngine.isBreakExtended();
 
 		// Scrollable content area (everything except bottom actions)
-		const scrollContent = containerEl.createEl('div', { cls: 'mikumodoro-scroll-content' });
+		const scrollContent = containerEl.createDiv({ cls: 'mikumodoro-scroll-content' });
 
 		// Timer row: display + mute toggle
-		const timerRow = scrollContent.createEl('div', { cls: 'mikumodoro-timer-row' });
+		const timerRow = scrollContent.createDiv({ cls: 'mikumodoro-timer-row' });
 
-		const timerDisplay = timerRow.createEl('div', { cls: 'mikumodoro-timer-display' });
+		const timerDisplay = timerRow.createDiv({ cls: 'mikumodoro-timer-display' });
 		this.timerDisplayEl = timerDisplay;
 		let displayMs: number;
 		if (state.mode === 'break') {
@@ -142,17 +148,17 @@ export class TimerView extends ItemView {
 		// Current task
 		const selected = this.plugin.getSelectedTask();
 		if (state.task) {
-			const taskEl = scrollContent.createEl('div', { cls: 'mikumodoro-current-task' });
-			taskEl.createEl('span', { text: '🎯 ', cls: 'mikumodoro-task-icon' });
-			taskEl.createEl('span', { text: state.task.content, cls: 'mikumodoro-task-name' });
+			const taskEl = scrollContent.createDiv({ cls: 'mikumodoro-current-task' });
+			taskEl.createSpan({ text: '🎯 ', cls: 'mikumodoro-task-icon' });
+			taskEl.createSpan({ text: state.task.content, cls: 'mikumodoro-task-name' });
 		} else if (selected) {
-			const taskEl = scrollContent.createEl('div', { cls: 'mikumodoro-current-task' });
-			taskEl.createEl('span', { text: '🎯 ', cls: 'mikumodoro-task-icon' });
-			taskEl.createEl('span', { text: selected.content, cls: 'mikumodoro-task-name' });
+			const taskEl = scrollContent.createDiv({ cls: 'mikumodoro-current-task' });
+			taskEl.createSpan({ text: '🎯 ', cls: 'mikumodoro-task-icon' });
+			taskEl.createSpan({ text: selected.content, cls: 'mikumodoro-task-name' });
 		}
 
 		// Controls
-		const controls = scrollContent.createEl('div', { cls: 'mikumodoro-controls' });
+		const controls = scrollContent.createDiv({ cls: 'mikumodoro-controls' });
 
 		if (state.mode === 'idle') {
 			const startBtn = controls.createEl('button', {
@@ -197,7 +203,7 @@ export class TimerView extends ItemView {
 			const extendBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-secondary',
 				text: '🏋️ Double Break',
-			}) as HTMLButtonElement;
+			});
 			this.extendBtnEl = extendBtn;
 			if (this.plugin.timerEngine.isBreakExtended()) {
 				extendBtn.disabled = true;
@@ -242,7 +248,7 @@ export class TimerView extends ItemView {
 	private renderTaskSelector(container: HTMLElement) {
 		const tasks = this.plugin.getCachedTasks();
 		if (tasks.length === 0) {
-			container.createEl('div', {
+			container.createDiv({
 				cls: 'mikumodoro-no-tasks',
 				text: 'No Todoist tasks found. Add your API token in settings.',
 			});
@@ -260,13 +266,13 @@ export class TimerView extends ItemView {
 			return;
 		}
 
-		const sectionEl = container.createEl('div', { cls: 'mikumodoro-task-selector' });
+		const sectionEl = container.createDiv({ cls: 'mikumodoro-task-selector' });
 
 		// Header row with label and refresh icon
-		const headerRow = sectionEl.createEl('div', { cls: 'mikumodoro-task-selector-header' });
-		headerRow.createEl('div', { text: 'Tasks', cls: 'mikumodoro-section-label' });
+		const headerRow = sectionEl.createDiv({ cls: 'mikumodoro-task-selector-header' });
+		headerRow.createDiv({ text: 'Tasks', cls: 'mikumodoro-section-label' });
 
-		const refreshIcon = headerRow.createEl('span', {
+		const refreshIcon = headerRow.createSpan({
 			cls: 'mikumodoro-refresh-icon',
 			attr: { 'aria-label': 'Refresh tasks' },
 		});
@@ -278,7 +284,7 @@ export class TimerView extends ItemView {
 			this.render();
 		});
 
-		const listEl = sectionEl.createEl('div', { cls: 'mikumodoro-task-list' });
+		const listEl = sectionEl.createDiv({ cls: 'mikumodoro-task-list' });
 
 		// Group tasks: project tasks by project_id, standalone top-level tasks separately
 		const projectGroups = new Map<string, { projectName: string; tasks: TodoistTask[] }>();
@@ -330,14 +336,14 @@ export class TimerView extends ItemView {
 			if (topLevelTasks.length === 0) continue;
 
 			// Project header (collapsible)
-			const projectHeader = listEl.createEl('div', { cls: 'mikumodoro-project-header' });
-			const projectArrow = projectHeader.createEl('span', { cls: 'mikumodoro-project-arrow' });
+			const projectHeader = listEl.createDiv({ cls: 'mikumodoro-project-header' });
+			const projectArrow = projectHeader.createSpan({ cls: 'mikumodoro-project-arrow' });
 			projectArrow.setText('▾');
-			projectHeader.createEl('span', { text: group.projectName, cls: 'mikumodoro-project-name' });
-			projectHeader.createEl('span', { cls: 'mikumodoro-project-count', text: String(topLevelTasks.length) });
+			projectHeader.createSpan({ text: group.projectName, cls: 'mikumodoro-project-name' });
+			projectHeader.createSpan({ cls: 'mikumodoro-project-count', text: String(topLevelTasks.length) });
 
 			// Header action buttons
-			const headerActions = projectHeader.createEl('div', { cls: 'mikumodoro-header-actions' });
+			const headerActions = projectHeader.createDiv({ cls: 'mikumodoro-header-actions' });
 			const addTaskBtn = headerActions.createEl('button', {
 				cls: 'mikumodoro-header-action-btn',
 				attr: { 'aria-label': 'Add task' },
@@ -348,7 +354,7 @@ export class TimerView extends ItemView {
 				this.openTaskCreator(group.projectName, tasks);
 			});
 
-			const projectContent = listEl.createEl('div', { cls: 'mikumodoro-project-content' });
+			const projectContent = listEl.createDiv({ cls: 'mikumodoro-project-content' });
 			const projectId = group.projectName;
 			// Default to expanded unless explicitly collapsed
 			if (this.expandedProjects.has('__collapsed__' + projectId)) {
@@ -395,14 +401,14 @@ export class TimerView extends ItemView {
 		const taskKey = 'standalone_' + task.id;
 
 		// Header (same style as project header)
-		const header = listEl.createEl('div', { cls: 'mikumodoro-project-header' });
-		const arrow = header.createEl('span', { cls: 'mikumodoro-project-arrow' });
+		const header = listEl.createDiv({ cls: 'mikumodoro-project-header' });
+		const arrow = header.createSpan({ cls: 'mikumodoro-project-arrow' });
 		arrow.setText('▾');
-		header.createEl('span', { text: task.content, cls: 'mikumodoro-project-name' });
-		header.createEl('span', { cls: 'mikumodoro-project-count', text: String(subtasks.length) });
+		header.createSpan({ text: task.content, cls: 'mikumodoro-project-name' });
+		header.createSpan({ cls: 'mikumodoro-project-count', text: String(subtasks.length) });
 
 		// Header action buttons: + subtask, link note
-		const headerActions = header.createEl('div', { cls: 'mikumodoro-header-actions' });
+		const headerActions = header.createDiv({ cls: 'mikumodoro-header-actions' });
 
 		const addSubBtn = headerActions.createEl('button', {
 			cls: 'mikumodoro-header-action-btn',
@@ -444,7 +450,7 @@ export class TimerView extends ItemView {
 		});
 
 		// Collapsible content
-		const content = listEl.createEl('div', { cls: 'mikumodoro-project-content' });
+		const content = listEl.createDiv({ cls: 'mikumodoro-project-content' });
 		if (this.expandedProjects.has('__collapsed__' + taskKey)) {
 			content.style.display = 'none';
 			arrow.setText('▸');
@@ -542,27 +548,27 @@ export class TimerView extends ItemView {
 		const subtasks = allTasks.filter(t => t.parent_id === task.id);
 
 		// Wrapper for this task + its subtasks
-		const wrapper = listEl.createEl('div', { cls: 'mikumodoro-task-wrapper' });
+		const wrapper = listEl.createDiv({ cls: 'mikumodoro-task-wrapper' });
 		if (depth > 0) wrapper.classList.add('subtask');
 		wrapper.style.marginLeft = `${depth * 16}px`;
 
 		// Task row
-		const item = wrapper.createEl('div', { cls: 'mikumodoro-task-item' });
+		const item = wrapper.createDiv({ cls: 'mikumodoro-task-item' });
 		if (isSelected) item.classList.add('selected');
 
 		// Expand arrow
-		const arrow = item.createEl('span', { cls: 'mikumodoro-task-arrow' });
+		const arrow = item.createSpan({ cls: 'mikumodoro-task-arrow' });
 		arrow.setText('▸');
 
 		// Task content
-		item.createEl('span', {
+		item.createSpan({
 			text: task.content,
 			cls: 'mikumodoro-task-item-name',
 		});
 
 		// Priority indicator
 		if (task.priority && task.priority > 1) {
-			const priorityEl = item.createEl('span', { cls: 'mikumodoro-task-priority' });
+			const priorityEl = item.createSpan({ cls: 'mikumodoro-task-priority' });
 			priorityEl.setText('●');
 			if (task.priority === 4) priorityEl.style.color = '#ef4444';
 			else if (task.priority === 3) priorityEl.style.color = '#f97316';
@@ -571,7 +577,7 @@ export class TimerView extends ItemView {
 
 		// Due date
 		if (task.due) {
-			const dueEl = item.createEl('span', { cls: 'mikumodoro-task-item-due' });
+			const dueEl = item.createSpan({ cls: 'mikumodoro-task-item-due' });
 			dueEl.setText(task.due.string);
 		}
 
@@ -580,7 +586,7 @@ export class TimerView extends ItemView {
 			? this.plugin.getTaskMinutesWithSubtasks(task.id)
 			: this.plugin.getTaskMinutes(task.id);
 		if (taskMinutes > 0) {
-			item.createEl('span', {
+			item.createSpan({
 				text: formatTaskTime(taskMinutes),
 				cls: 'mikumodoro-task-item-time',
 			});
@@ -620,7 +626,7 @@ export class TimerView extends ItemView {
 		}
 
 		// Subtask container (for rendering children)
-		const subtaskContainer = wrapper.createEl('div', { cls: 'mikumodoro-subtask-container' });
+		const subtaskContainer = wrapper.createDiv({ cls: 'mikumodoro-subtask-container' });
 		const expanded = this.expandedTasks.has(task.id);
 		arrow.setText(expanded ? '▾' : '▸');
 
@@ -656,50 +662,50 @@ export class TimerView extends ItemView {
 	}
 
 	private renderTaskDetail(container: HTMLElement, task: TodoistTask) {
-		const detail = container.createEl('div', { cls: 'mikumodoro-task-detail' });
+		const detail = container.createDiv({ cls: 'mikumodoro-task-detail' });
 
 		// Description
 		if (task.description) {
-			const descEl = detail.createEl('div', { cls: 'mikumodoro-detail-row' });
-			descEl.createEl('span', { cls: 'mikumodoro-detail-label', text: 'Description' });
-			descEl.createEl('span', { text: task.description, cls: 'mikumodoro-detail-value' });
+			const descEl = detail.createDiv({ cls: 'mikumodoro-detail-row' });
+			descEl.createSpan({ cls: 'mikumodoro-detail-label', text: 'Description' });
+			descEl.createSpan({ text: task.description, cls: 'mikumodoro-detail-value' });
 		}
 
 		// Due date
 		if (task.due) {
-			const dueEl = detail.createEl('div', { cls: 'mikumodoro-detail-row' });
-			dueEl.createEl('span', { cls: 'mikumodoro-detail-label', text: 'Due' });
-			const valEl = dueEl.createEl('span', { cls: 'mikumodoro-detail-value' });
+			const dueEl = detail.createDiv({ cls: 'mikumodoro-detail-row' });
+			dueEl.createSpan({ cls: 'mikumodoro-detail-label', text: 'Due' });
+			const valEl = dueEl.createSpan({ cls: 'mikumodoro-detail-value' });
 			valEl.setText(task.due.string + (task.due.is_recurring ? ' (recurring)' : ''));
 		}
 
 		// Priority
 		if (task.priority && task.priority > 1) {
-			const priEl = detail.createEl('div', { cls: 'mikumodoro-detail-row' });
-			priEl.createEl('span', { cls: 'mikumodoro-detail-label', text: 'Priority' });
+			const priEl = detail.createDiv({ cls: 'mikumodoro-detail-row' });
+			priEl.createSpan({ cls: 'mikumodoro-detail-label', text: 'Priority' });
 			const levels = ['', 'Normal', 'High', 'Very High', 'Urgent'];
-			priEl.createEl('span', { cls: 'mikumodoro-detail-value', text: levels[task.priority] ?? 'Normal' });
+			priEl.createSpan({ cls: 'mikumodoro-detail-value', text: levels[task.priority] ?? 'Normal' });
 		}
 
 		// Project
 		if (task.project_name) {
-			const projEl = detail.createEl('div', { cls: 'mikumodoro-detail-row' });
-			projEl.createEl('span', { cls: 'mikumodoro-detail-label', text: 'Project' });
-			projEl.createEl('span', { cls: 'mikumodoro-detail-value', text: task.project_name });
+			const projEl = detail.createDiv({ cls: 'mikumodoro-detail-row' });
+			projEl.createSpan({ cls: 'mikumodoro-detail-label', text: 'Project' });
+			projEl.createSpan({ cls: 'mikumodoro-detail-value', text: task.project_name });
 		}
 
 		// Labels
 		if (task.labels && task.labels.length > 0) {
-			const labelsEl = detail.createEl('div', { cls: 'mikumodoro-detail-row' });
-			labelsEl.createEl('span', { cls: 'mikumodoro-detail-label', text: 'Labels' });
-			labelsEl.createEl('span', { cls: 'mikumodoro-detail-value', text: task.labels.join(', ') });
+			const labelsEl = detail.createDiv({ cls: 'mikumodoro-detail-row' });
+			labelsEl.createSpan({ cls: 'mikumodoro-detail-label', text: 'Labels' });
+			labelsEl.createSpan({ cls: 'mikumodoro-detail-value', text: task.labels.join(', ') });
 		}
 
 		// Duration
 		if (task.duration) {
-			const durEl = detail.createEl('div', { cls: 'mikumodoro-detail-row' });
-			durEl.createEl('span', { cls: 'mikumodoro-detail-label', text: 'Duration' });
-			durEl.createEl('span', {
+			const durEl = detail.createDiv({ cls: 'mikumodoro-detail-row' });
+			durEl.createSpan({ cls: 'mikumodoro-detail-label', text: 'Duration' });
+			durEl.createSpan({
 				cls: 'mikumodoro-detail-value',
 				text: `${task.duration.amount} ${task.duration.unit}`,
 			});
@@ -711,16 +717,16 @@ export class TimerView extends ItemView {
 			? this.plugin.getTaskMinutesWithSubtasks(task.id)
 			: this.plugin.getTaskMinutes(task.id);
 		if (taskMinutes > 0) {
-			const timeEl = detail.createEl('div', { cls: 'mikumodoro-detail-row' });
-			timeEl.createEl('span', { cls: 'mikumodoro-detail-label', text: 'Time spent' });
-			timeEl.createEl('span', {
+			const timeEl = detail.createDiv({ cls: 'mikumodoro-detail-row' });
+			timeEl.createSpan({ cls: 'mikumodoro-detail-label', text: 'Time spent' });
+			timeEl.createSpan({
 				cls: 'mikumodoro-detail-value mikumodoro-detail-highlight',
 				text: formatTaskTime(taskMinutes),
 			});
 		}
 
 		// Action buttons
-		const actionsEl = detail.createEl('div', { cls: 'mikumodoro-task-actions' });
+		const actionsEl = detail.createDiv({ cls: 'mikumodoro-task-actions' });
 
 		// Complete task button
 		const completeBtn = actionsEl.createEl('button', {
@@ -793,12 +799,12 @@ export class TimerView extends ItemView {
 			cls: 'mikumodoro-modal-input',
 		});
 
-		const resultsEl = modal.contentEl.createEl('div', { cls: 'mikumodoro-modal-results' });
+		const resultsEl = modal.contentEl.createDiv({ cls: 'mikumodoro-modal-results' });
 
-		let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+		let searchTimeout: number | null = null;
 		inputEl.addEventListener('input', () => {
-			if (searchTimeout) clearTimeout(searchTimeout);
-			searchTimeout = setTimeout(() => {
+			if (searchTimeout) window.clearTimeout(searchTimeout);
+			searchTimeout = window.setTimeout(() => {
 				const query = inputEl.value.trim();
 				if (!query) {
 					resultsEl.empty();
@@ -809,7 +815,7 @@ export class TimerView extends ItemView {
 					.slice(0, 10);
 				resultsEl.empty();
 				for (const file of files) {
-					const result = resultsEl.createEl('div', {
+					const result = resultsEl.createDiv({
 						cls: 'mikumodoro-modal-result-item',
 						text: file.path,
 					});
@@ -902,7 +908,7 @@ export class TimerView extends ItemView {
 			cls: 'mikumodoro-modal-input',
 		});
 
-		const suggestionsEl = modal.contentEl.createEl('div', { cls: 'mikumodoro-modal-suggestions' });
+		const suggestionsEl = modal.contentEl.createDiv({ cls: 'mikumodoro-modal-suggestions' });
 		suggestionsEl.style.maxHeight = '300px';
 
 		const todoistTasks = this.plugin.getCachedTasks();
@@ -923,13 +929,13 @@ export class TimerView extends ItemView {
 				.slice(0, 15);
 
 			if (customMatched.length > 0) {
-				const header = suggestionsEl.createEl('div', {
+				const header = suggestionsEl.createDiv({
 					cls: 'mikumodoro-modal-suggestion-header',
 					text: 'Recent Activities',
 				});
 				header.style.cssText = 'font-size:0.7em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;padding:4px 12px 2px;';
 				for (const label of customMatched) {
-					const item = suggestionsEl.createEl('div', {
+					const item = suggestionsEl.createDiv({
 						cls: 'mikumodoro-modal-suggestion-item',
 						text: '\u26a1 ' + label,
 					});
@@ -942,18 +948,18 @@ export class TimerView extends ItemView {
 			}
 
 			if (taskMatched.length > 0) {
-				const header = suggestionsEl.createEl('div', {
+				const header = suggestionsEl.createDiv({
 					cls: 'mikumodoro-modal-suggestion-header',
 					text: 'Todoist Tasks',
 				});
 				header.style.cssText = 'font-size:0.7em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;padding:4px 12px 2px;';
 				for (const task of taskMatched) {
-					const item = suggestionsEl.createEl('div', {
+					const item = suggestionsEl.createDiv({
 						cls: 'mikumodoro-modal-suggestion-item',
 						text: task.content,
 					});
 					if (task.project_name && task.project_name !== 'Inbox') {
-						const proj = item.createEl('span', {
+						const proj = item.createSpan({
 							cls: 'mikumodoro-modal-suggestion-project',
 							text: ' ' + task.project_name,
 						});
@@ -969,7 +975,7 @@ export class TimerView extends ItemView {
 			}
 
 			if (customMatched.length === 0 && taskMatched.length === 0 && filter.trim()) {
-				suggestionsEl.createEl('div', {
+				suggestionsEl.createDiv({
 					cls: 'mikumodoro-modal-suggestion-item',
 					text: '\u26a1 Start custom: "' + filter.trim() + '"',
 					attr: { style: 'color:var(--interactive-accent);' },
@@ -1005,18 +1011,18 @@ export class TimerView extends ItemView {
 	}
 
 	private renderBottomActions(container: HTMLElement) {
-		const bar = container.createEl('div', { cls: 'mikumodoro-bottom-actions' });
+		const bar = container.createDiv({ cls: 'mikumodoro-bottom-actions' });
 
 		const trackBtn = bar.createEl('button', {
 			cls: 'mikumodoro-btn mikumodoro-btn-secondary mikumodoro-bottom-btn',
 		});
-		trackBtn.createEl('span', { text: '⚡ Track Activity' });
+		trackBtn.createSpan({ text: '⚡ Track Activity' });
 		trackBtn.addEventListener('click', () => this.openActivityTracker());
 
 		const logBtn = bar.createEl('button', {
 			cls: 'mikumodoro-btn mikumodoro-btn-secondary mikumodoro-bottom-btn',
 		});
-		logBtn.createEl('span', { text: '📝 Log Time' });
+		logBtn.createSpan({ text: '📝 Log Time' });
 		logBtn.addEventListener('click', () => this.openManualTimeLogger());
 	}
 
@@ -1035,7 +1041,7 @@ export class TimerView extends ItemView {
 			cls: 'mikumodoro-modal-input',
 		});
 
-		const suggestionsEl = modal.contentEl.createEl('div', { cls: 'mikumodoro-modal-suggestions' });
+		const suggestionsEl = modal.contentEl.createDiv({ cls: 'mikumodoro-modal-suggestions' });
 
 		const allLabels = this.plugin.getCustomActivityLabels();
 		const renderSuggestions = (filter: string) => {
@@ -1044,7 +1050,7 @@ export class TimerView extends ItemView {
 				.filter(l => l.toLowerCase().includes(filter.toLowerCase()))
 				.slice(0, 8);
 			for (const label of filtered) {
-				const item = suggestionsEl.createEl('div', {
+				const item = suggestionsEl.createDiv({
 					cls: 'mikumodoro-modal-suggestion-item',
 					text: label,
 				});
@@ -1102,7 +1108,7 @@ export class TimerView extends ItemView {
 			cls: 'mikumodoro-modal-input',
 		});
 
-		const suggestionsEl = modal.contentEl.createEl('div', { cls: 'mikumodoro-modal-suggestions' });
+		const suggestionsEl = modal.contentEl.createDiv({ cls: 'mikumodoro-modal-suggestions' });
 		const allLabels = this.plugin.getCustomActivityLabels();
 
 		const renderSuggestions = (filter: string) => {
@@ -1111,7 +1117,7 @@ export class TimerView extends ItemView {
 				.filter(l => l.toLowerCase().includes(filter.toLowerCase()))
 				.slice(0, 8);
 			for (const label of filtered) {
-				const item = suggestionsEl.createEl('div', {
+				const item = suggestionsEl.createDiv({
 					cls: 'mikumodoro-modal-suggestion-item',
 					text: label,
 				});
@@ -1125,10 +1131,10 @@ export class TimerView extends ItemView {
 		inputEl.addEventListener('input', () => renderSuggestions(inputEl.value.trim()));
 		renderSuggestions('');
 
-		const durationArea = modal.contentEl.createEl('div', { cls: 'mikumodoro-log-duration-area' });
+		const durationArea = modal.contentEl.createDiv({ cls: 'mikumodoro-log-duration-area' });
 		durationArea.createEl('label', { text: 'Duration', cls: 'mikumodoro-log-label' });
 
-		const sliderRow = durationArea.createEl('div', { cls: 'mikumodoro-log-slider-row' });
+		const sliderRow = durationArea.createDiv({ cls: 'mikumodoro-log-slider-row' });
 		const slider = sliderRow.createEl('input', {
 			type: 'range',
 			cls: 'mikumodoro-log-slider',
@@ -1138,7 +1144,7 @@ export class TimerView extends ItemView {
 		slider.step = '5';
 		slider.value = '30';
 
-		const valueDisplay = sliderRow.createEl('span', { cls: 'mikumodoro-log-value', text: '30m' });
+		const valueDisplay = sliderRow.createSpan({ cls: 'mikumodoro-log-value', text: '30m' });
 
 		slider.addEventListener('input', () => {
 			const val = parseInt(slider.value);
@@ -1147,7 +1153,7 @@ export class TimerView extends ItemView {
 			valueDisplay.setText(h > 0 ? `${h}h ${m}m` : `${m}m`);
 		});
 
-		const dateArea = modal.contentEl.createEl('div', { cls: 'mikumodoro-log-date-area' });
+		const dateArea = modal.contentEl.createDiv({ cls: 'mikumodoro-log-date-area' });
 		dateArea.createEl('label', { text: 'Date', cls: 'mikumodoro-log-label' });
 		const dateInput = dateArea.createEl('input', {
 			type: 'date',
@@ -1186,10 +1192,10 @@ export class TimerView extends ItemView {
 			.getSessions()
 			.filter((s) => formatLocalDate(new Date(s.startTime)) === today);
 
-		const section = container.createEl('div', { cls: 'mikumodoro-sessions-section' });
+		const section = container.createDiv({ cls: 'mikumodoro-sessions-section' });
 
 		// Resize handle at top
-		const resizeHandle = section.createEl('div', { cls: 'mikumodoro-sessions-resize-handle' });
+		const resizeHandle = section.createDiv({ cls: 'mikumodoro-sessions-resize-handle' });
 		resizeHandle.setText('⠿');
 
 		// Restore saved height
@@ -1225,25 +1231,30 @@ export class TimerView extends ItemView {
 			document.body.style.cursor = '';
 			document.body.style.userSelect = '';
 			this.plugin.settings.sessionsHeight = section.offsetHeight;
-			this.plugin.saveSettings();
+			void this.plugin.saveSettings().catch(err => {
+				console.error('Mikumodoro: Failed to save sessions panel height', err);
+			});
+		};
+		const cleanup = () => {
+			if (isResizing) {
+				isResizing = false;
+				document.body.style.cursor = '';
+				document.body.style.userSelect = '';
+			}
+			document.removeEventListener('mousemove', onMove);
+			document.removeEventListener('mouseup', onUp);
 		};
 
 		document.addEventListener('mousemove', onMove);
 		document.addEventListener('mouseup', onUp);
-		// Clean up when view closes
-		this.registerEvent(this.app.workspace.on('layout-change', () => {
-			if (!section.isConnected) {
-				document.removeEventListener('mousemove', onMove);
-				document.removeEventListener('mouseup', onUp);
-			}
-		}));
+		this.resizeCleanups.push(cleanup);
 
-		section.createEl('div', { text: 'Today\'s Sessions', cls: 'mikumodoro-section-label' });
+		section.createDiv({ text: 'Today\'s Sessions', cls: 'mikumodoro-section-label' });
 
-		const list = section.createEl('div', { cls: 'mikumodoro-sessions-list' });
+		const list = section.createDiv({ cls: 'mikumodoro-sessions-list' });
 
 		if (todaySessions.length === 0) {
-			list.createEl('div', {
+			list.createDiv({
 				cls: 'mikumodoro-session-total',
 				text: 'No sessions yet today',
 			});
@@ -1251,18 +1262,23 @@ export class TimerView extends ItemView {
 		}
 
 		const totalMin = todaySessions.reduce((a, s) => a + s.durationMinutes, 0);
-		list.createEl('div', {
+		list.createDiv({
 			cls: 'mikumodoro-session-total',
 			text: `${todaySessions.length} sessions · ${(totalMin / 60).toFixed(1)}h`,
 		});
 
 		for (const s of todaySessions.reverse()) {
 			const time = new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-			const item = list.createEl('div', { cls: 'mikumodoro-session-item' });
-			item.createEl('span', { text: time, cls: 'mikumodoro-session-time' });
-			item.createEl('span', { text: s.taskContent, cls: 'mikumodoro-session-task' });
-			item.createEl('span', { text: `${s.durationMinutes}m`, cls: 'mikumodoro-session-duration' });
+			const item = list.createDiv({ cls: 'mikumodoro-session-item' });
+			item.createSpan({ text: time, cls: 'mikumodoro-session-time' });
+			item.createSpan({ text: s.taskContent, cls: 'mikumodoro-session-task' });
+			item.createSpan({ text: `${s.durationMinutes}m`, cls: 'mikumodoro-session-duration' });
 		}
+	}
+
+	private cleanupResizeHandlers() {
+		for (const cleanup of this.resizeCleanups) cleanup();
+		this.resizeCleanups = [];
 	}
 }
 

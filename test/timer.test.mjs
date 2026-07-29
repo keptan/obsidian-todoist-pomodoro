@@ -1,10 +1,10 @@
 // Quick test for Mikumodoro timer logic
-// Run: node test/timer.test.mjs
+// Run: npm test
 
 // Mock window for Node.js
 globalThis.window = {
-	setInterval: (fn, ms) => setInterval(fn, ms),
-	clearInterval: (id) => clearInterval(id),
+	setInterval: (fn, ms) => globalThis.setInterval(fn, ms),
+	clearInterval: (id) => globalThis.clearInterval(id),
 };
 
 import { TimerEngine } from '../src/timer.ts';
@@ -105,6 +105,35 @@ assert(newEngine.getSessions().length === savedSessions.length, 'Loaded sessions
 // Test 10: Break ratio math
 const ratioSettings = { ...settings, breakRatio: 5 };
 assert(ratioSettings.breakRatio === 5, 'Break ratio should be 5');
+
+// Test 11: Paused breaks resume as breaks
+engine.startWork(mockTask);
+engine.startBreak();
+engine.pause();
+engine.resume();
+assert(engine.getState().mode === 'break', 'Paused break should resume as break');
+
+// Test 12: Stopping a paused break must not record a work session
+engine.pause();
+const sessionsBeforePausedBreakStop = engine.getSessions().length;
+engine.stop();
+assert(
+	engine.getSessions().length === sessionsBeforePausedBreakStop,
+	'Stopping a paused break should not record a work session',
+);
+
+// Test 13: Starting work from a paused break must not record a work session
+engine.startWork(mockTask);
+engine.startBreak();
+engine.pause();
+const sessionsBeforeWorkFromPausedBreak = engine.getSessions().length;
+engine.startWork(mockTask);
+assert(
+	engine.getSessions().length === sessionsBeforeWorkFromPausedBreak,
+	'Starting work from a paused break should not record a work session',
+);
+engine.destroy();
+newEngine.destroy();
 
 console.log('---');
 console.log(`Results: ${passed} passed, ${failed} failed`);

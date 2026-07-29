@@ -20,10 +20,10 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl('h2', { text: 'Mikumodoro Timer Settings' });
+		;
 
 		// Connection status indicator
-		const statusEl = containerEl.createEl('div', { cls: 'mikumodoro-connection-status' });
+		const statusEl = containerEl.createDiv({ cls: 'mikumodoro-connection-status' });
 		this.renderConnectionStatus(statusEl);
 
 		const tokenSetting = new Setting(containerEl)
@@ -169,8 +169,8 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 			);
 
 		// --- Google Calendar section ---
-		containerEl.createEl('h3', { text: 'Google Calendar (Readonly)' });
-		const gcalDesc = containerEl.createEl('div', { cls: 'setting-item-description' });
+		new Setting(containerEl).setName("Google Calendar (Readonly)").setHeading();
+		const gcalDesc = containerEl.createDiv({ cls: 'setting-item-description' });
 		gcalDesc.setText('Add public iCal/ICS URLs from Google Calendar. Events will highlight dates on the heatmap with colored borders.');
 		gcalDesc.style.marginBottom = '12px';
 
@@ -193,7 +193,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 	}
 
 	private renderCalendarList(containerEl: HTMLElement) {
-		const listEl = containerEl.createEl('div', { cls: 'mikumodoro-calendar-list' });
+		const listEl = containerEl.createDiv({ cls: 'mikumodoro-calendar-list' });
 
 		const calendars = this.plugin.settings.calendars;
 
@@ -209,7 +209,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 		const cal = this.plugin.settings.calendars[idx];
 		if (!cal) return;
 
-		const rowEl = listEl.createEl('div', { cls: 'mikumodoro-calendar-row' });
+		const rowEl = listEl.createDiv({ cls: 'mikumodoro-calendar-row' });
 
 		// URL input
 		const urlInput = rowEl.createEl('input', { type: 'text', cls: 'mikumodoro-calendar-url-input' });
@@ -261,7 +261,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 	}
 
 	private renderAddCalendarRow(listEl: HTMLElement) {
-		const rowEl = listEl.createEl('div', { cls: 'mikumodoro-calendar-row mikumodoro-calendar-add-row' });
+		const rowEl = listEl.createDiv({ cls: 'mikumodoro-calendar-row mikumodoro-calendar-add-row' });
 
 		const urlInput = rowEl.createEl('input', { type: 'text', cls: 'mikumodoro-calendar-url-input' });
 		urlInput.placeholder = 'Add calendar iCal URL...';
@@ -300,8 +300,8 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 		const connected = this.plugin.todoistConnected;
 		const hasToken = !!this.plugin.settings.todoistApiToken;
 
-		const dot = el.createEl('span', { cls: 'mikumodoro-status-dot' });
-		const label = el.createEl('span', { cls: 'mikumodoro-status-label' });
+		const dot = el.createSpan({ cls: 'mikumodoro-status-dot' });
+		const label = el.createSpan({ cls: 'mikumodoro-status-label' });
 
 		if (connected) {
 			dot.classList.add('connected');

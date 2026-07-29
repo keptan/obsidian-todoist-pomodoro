@@ -76,12 +76,12 @@ export function renderHeatmap(
 	function render() {
 		container.empty();
 
-		const header = container.createEl('div', { cls: 'mikumodoro-heatmap-header' });
-		header.createEl('div', { cls: 'mikumodoro-heatmap-title-area' });
+		const header = container.createDiv({ cls: 'mikumodoro-heatmap-header' });
+		header.createDiv({ cls: 'mikumodoro-heatmap-title-area' });
 
-		const navArea = header.createEl('div', { cls: 'mikumodoro-heatmap-nav' });
+		const navArea = header.createDiv({ cls: 'mikumodoro-heatmap-nav' });
 		const prevBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', text: '‹' });
-		const labelEl = navArea.createEl('span', { cls: 'mikumodoro-heatmap-nav-label' });
+		const labelEl = navArea.createSpan({ cls: 'mikumodoro-heatmap-nav-label' });
 		const nextBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', text: '›' });
 
 		const toggleArea = navArea;
@@ -101,7 +101,7 @@ export function renderHeatmap(
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
 
-		const contentArea = container.createEl('div', { cls: 'mikumodoro-heatmap-content' });
+		const contentArea = container.createDiv({ cls: 'mikumodoro-heatmap-content' });
 		if (slideDirection === 'left') contentArea.classList.add('slide-left');
 		else if (slideDirection === 'right') contentArea.classList.add('slide-right');
 
@@ -156,25 +156,25 @@ function renderYearView(
 
 	const totalMinutes = sumMinutesInRange(dayMap, yearStart, yearEnd);
 	const totalHours = (totalMinutes / 60).toFixed(1);
-	const statsEl = container.createEl('div', { cls: 'mikumodoro-heatmap-stats' });
+	const statsEl = container.createDiv({ cls: 'mikumodoro-heatmap-stats' });
 	statsEl.setText(`${totalHours}h in ${year}`);
 
 	const monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-	const gridWrapper = container.createEl('div', { cls: 'mikumodoro-heatmap-grid-wrapper' });
+	const gridWrapper = container.createDiv({ cls: 'mikumodoro-heatmap-grid-wrapper' });
 
-	const labelsCol = gridWrapper.createEl('div', { cls: 'mikumodoro-heatmap-labels' });
+	const labelsCol = gridWrapper.createDiv({ cls: 'mikumodoro-heatmap-labels' });
 	const dayLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 	for (let i = 0; i < 7; i++) {
-		labelsCol.createEl('div', {
+		labelsCol.createDiv({
 			cls: 'mikumodoro-heatmap-day-label',
 			text: i % 2 === 1 ? dayLabels[i] : '',
 		});
 	}
 
-	const gridArea = gridWrapper.createEl('div', { cls: 'mikumodoro-heatmap-grid-area' });
-	const monthLabelRow = gridArea.createEl('div', { cls: 'mikumodoro-heatmap-month-labels' });
-	const grid = gridArea.createEl('div', { cls: 'mikumodoro-heatmap-grid' });
+	const gridArea = gridWrapper.createDiv({ cls: 'mikumodoro-heatmap-grid-area' });
+	const monthLabelRow = gridArea.createDiv({ cls: 'mikumodoro-heatmap-month-labels' });
+	const grid = gridArea.createDiv({ cls: 'mikumodoro-heatmap-grid' });
 
 	const startDate = new Date(year, 0, 1);
 	startDate.setDate(startDate.getDate() - startDate.getDay());
@@ -183,7 +183,7 @@ function renderYearView(
 	const cursor = new Date(startDate);
 
 	while (cursor <= yearEnd && currentWeek < 54) {
-		const monthLabel = monthLabelRow.createEl('span', { cls: 'mikumodoro-heatmap-month-label' });
+		const monthLabel = monthLabelRow.createSpan({ cls: 'mikumodoro-heatmap-month-label' });
 		const firstWeekDate = new Date(cursor);
 		const prevWeekDate = new Date(cursor.getTime() - 7 * 86400000);
 		if (firstWeekDate.getMonth() !== prevWeekDate.getMonth() || currentWeek === 0) {
@@ -195,7 +195,7 @@ function renderYearView(
 			}
 		}
 
-		const weekCol = grid.createEl('div', { cls: 'mikumodoro-heatmap-week' });
+		const weekCol = grid.createDiv({ cls: 'mikumodoro-heatmap-week' });
 
 		for (let d = 0; d < 7; d++) {
 			const date = new Date(cursor);
@@ -210,7 +210,7 @@ function renderYearView(
 			const hasDue = dueDateSet.has(dateStr);
 			const dayCalEvents = calEvents.get(dateStr) ?? [];
 
-			const cell = weekCol.createEl('div', { cls: 'mikumodoro-heatmap-cell' });
+			const cell = weekCol.createDiv({ cls: 'mikumodoro-heatmap-cell' });
 
 			if (!isInYear) {
 				cell.classList.add('out-of-range');
@@ -228,7 +228,7 @@ function renderYearView(
 			}
 
 			if (isInYear && !isFuture && completions > 0) {
-				cell.createEl('span', { cls: 'mikumodoro-completion-badge', text: String(completions) });
+				cell.createSpan({ cls: 'mikumodoro-completion-badge', text: String(completions) });
 			}
 
 			if (isInYear) {
@@ -269,19 +269,19 @@ function renderMonthView(
 	const totalMinutes = sumMinutesInRange(dayMap, monthStart, monthEnd);
 	const totalHours = (totalMinutes / 60).toFixed(1);
 	const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-	const statsEl = container.createEl('div', { cls: 'mikumodoro-heatmap-stats' });
+	const statsEl = container.createDiv({ cls: 'mikumodoro-heatmap-stats' });
 	statsEl.setText(`${totalHours}h in ${monthNames[month]} ${year}`);
 
 	const dayLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-	const headerRow = container.createEl('div', { cls: 'mikumodoro-heatmap-month-header' });
+	const headerRow = container.createDiv({ cls: 'mikumodoro-heatmap-month-header' });
 	for (const dl of dayLabels) {
-		headerRow.createEl('div', { cls: 'mikumodoro-heatmap-month-day-label', text: dl });
+		headerRow.createDiv({ cls: 'mikumodoro-heatmap-month-day-label', text: dl });
 	}
 
-	const calGrid = container.createEl('div', { cls: 'mikumodoro-heatmap-month-grid' });
+	const calGrid = container.createDiv({ cls: 'mikumodoro-heatmap-month-grid' });
 	const firstDayOfWeek = monthStart.getDay();
 	for (let i = 0; i < firstDayOfWeek; i++) {
-		calGrid.createEl('div', { cls: 'mikumodoro-heatmap-month-cell out-of-range' });
+		calGrid.createDiv({ cls: 'mikumodoro-heatmap-month-cell out-of-range' });
 	}
 
 	for (let day = 1; day <= monthEnd.getDate(); day++) {
@@ -294,8 +294,8 @@ function renderMonthView(
 		const hasDue = dueDateSet.has(dateStr);
 		const dayCalEvents = calEvents.get(dateStr) ?? [];
 
-		const cell = calGrid.createEl('div', { cls: 'mikumodoro-heatmap-month-cell' });
-		cell.createEl('span', { cls: 'mikumodoro-heatmap-month-day-num', text: String(day) });
+		const cell = calGrid.createDiv({ cls: 'mikumodoro-heatmap-month-cell' });
+		cell.createSpan({ cls: 'mikumodoro-heatmap-month-day-num', text: String(day) });
 
 		if (isFuture) {
 			cell.classList.add('future');
@@ -309,7 +309,7 @@ function renderMonthView(
 		applyCalendarBorder(cell, hasDue, dayCalEvents);
 
 		if (!isFuture && completions > 0) {
-			cell.createEl('span', { cls: 'mikumodoro-completion-badge', text: String(completions) });
+			cell.createSpan({ cls: 'mikumodoro-completion-badge', text: String(completions) });
 		}
 
 		const dueTasks = dueDateTasks.get(dateStr) ?? [];
@@ -430,9 +430,9 @@ function attachTooltips(container: HTMLElement) {
 	if (container.dataset.tooltipsAttached) return;
 	container.dataset.tooltipsAttached = '1';
 
-	let tooltipEl = document.body.querySelector('.mikumodoro-heatmap-tooltip') as HTMLElement | null;
+	let tooltipEl = document.body.querySelector<HTMLElement>('.mikumodoro-heatmap-tooltip');
 	if (!tooltipEl) {
-		tooltipEl = document.createElement('div');
+		tooltipEl = createDiv();
 		tooltipEl.className = 'mikumodoro-heatmap-tooltip';
 		document.body.appendChild(tooltipEl);
 	}
@@ -440,45 +440,45 @@ function attachTooltips(container: HTMLElement) {
 	const show = (target: HTMLElement) => {
 		const text = target.getAttribute('data-tooltip');
 		if (!text) return;
-		tooltipEl!.textContent = text;
-		tooltipEl!.style.display = 'block';
+		tooltipEl.textContent = text;
+		tooltipEl.style.display = 'block';
 		const rect = target.getBoundingClientRect();
-		const tipRect = tooltipEl!.getBoundingClientRect();
+		const tipRect = tooltipEl.getBoundingClientRect();
 		let left = rect.left + rect.width / 2 - tipRect.width / 2;
 		let top = rect.top - tipRect.height - 6;
 		left = Math.max(4, Math.min(left, window.innerWidth - tipRect.width - 4));
 		if (top < 4) top = rect.bottom + 6;
-		tooltipEl!.style.left = `${left}px`;
-		tooltipEl!.style.top = `${top}px`;
+		tooltipEl.style.left = `${left}px`;
+		tooltipEl.style.top = `${top}px`;
 	};
 
 	container.addEventListener('mouseover', (e) => {
-		const target = (e.target as HTMLElement).closest('.has-tooltip') as HTMLElement | null;
+		const target = (e.target as HTMLElement).closest<HTMLElement>('.has-tooltip');
 		if (target) {
 			show(target);
 		} else {
-			tooltipEl!.style.display = 'none';
+			tooltipEl.style.display = 'none';
 		}
 	});
 
 	container.addEventListener('mouseleave', () => {
-		tooltipEl!.style.display = 'none';
+		tooltipEl.style.display = 'none';
 	});
 }
 
 function renderLegend(container: HTMLElement, settings: MikumodoroSettings) {
-	const legend = container.createEl('div', { cls: 'mikumodoro-heatmap-legend' });
-	legend.createEl('span', { cls: 'mikumodoro-heatmap-legend-label', text: 'Less' });
+	const legend = container.createDiv({ cls: 'mikumodoro-heatmap-legend' });
+	legend.createSpan({ cls: 'mikumodoro-heatmap-legend-label', text: 'Less' });
 	for (let i = 0; i < 5; i++) {
 		const intensity = i / 4;
-		const swatch = legend.createEl('div', { cls: 'mikumodoro-heatmap-cell' });
+		const swatch = legend.createDiv({ cls: 'mikumodoro-heatmap-cell' });
 		if (i === 0) {
 			swatch.classList.add('empty');
 		} else {
 			swatch.style.backgroundColor = interpolateColor(settings.heatmapColor, intensity);
 		}
 	}
-	legend.createEl('span', { cls: 'mikumodoro-heatmap-legend-label', text: 'More' });
+	legend.createSpan({ cls: 'mikumodoro-heatmap-legend-label', text: 'More' });
 }
 
 function sumMinutesInRange(dayMap: Map<string, number>, start: Date, end: Date): number {
