@@ -381,10 +381,10 @@ export class TimerView extends ItemView {
 			});
 		}
 
-		// Render standalone top-level tasks (no project) as headers
+		// Render standalone top-level tasks as tasks, not project-like containers.
 		const sortedStandalone = sortTasks(standaloneTasks);
 		for (const task of sortedStandalone) {
-			this.renderTaskAsHeader(listEl, task, tasks);
+			this.renderTaskItem(listEl, task, tasks, 0);
 		}
 	}
 
@@ -394,91 +394,6 @@ export class TimerView extends ItemView {
 			this.expandedTasks.add(current.parent_id);
 			current = allTasks.find(t => t.id === current!.parent_id);
 		}
-	}
-
-	private renderTaskAsHeader(listEl: HTMLElement, task: TodoistTask, allTasks: TodoistTask[]) {
-		const subtasks = allTasks.filter(t => t.parent_id === task.id);
-		const taskKey = 'standalone_' + task.id;
-
-		// Header (same style as project header)
-		const header = listEl.createDiv({ cls: 'mikumodoro-project-header' });
-		const arrow = header.createSpan({ cls: 'mikumodoro-project-arrow' });
-		arrow.setText('▾');
-		header.createSpan({ text: task.content, cls: 'mikumodoro-project-name' });
-		header.createSpan({ cls: 'mikumodoro-project-count', text: String(subtasks.length) });
-
-		// Header action buttons: + subtask, link note
-		const headerActions = header.createDiv({ cls: 'mikumodoro-header-actions' });
-
-		const addSubBtn = headerActions.createEl('button', {
-			cls: 'mikumodoro-header-action-btn',
-			attr: { 'aria-label': 'Add subtask' },
-		});
-		addSubBtn.setText('＋');
-		addSubBtn.addEventListener('click', (e) => {
-			e.stopPropagation();
-			this.openSubtaskCreator(task);
-		});
-
-		const notePath = this.plugin.getTaskNotePath(task.id);
-		if (notePath) {
-			const openNoteBtn = headerActions.createEl('button', {
-				cls: 'mikumodoro-header-action-btn',
-				attr: { 'aria-label': 'Open linked note' },
-			});
-			openNoteBtn.setText('📂');
-			openNoteBtn.addEventListener('click', (e) => {
-				e.stopPropagation();
-			this.app.workspace.openLinkText(notePath, '', false);
-			});
-		} else {
-			const linkBtn = headerActions.createEl('button', {
-				cls: 'mikumodoro-header-action-btn',
-				attr: { 'aria-label': 'Link note' },
-			});
-			linkBtn.setText('🔗');
-			linkBtn.addEventListener('click', (e) => {
-				e.stopPropagation();
-				this.openNoteLinker(task);
-			});
-		}
-
-		// Click header name to select the task itself
-		header.addEventListener('click', () => {
-			this.plugin.setSelectedTask(task);
-			this.render();
-		});
-
-		// Collapsible content
-		const content = listEl.createDiv({ cls: 'mikumodoro-project-content' });
-		if (this.expandedProjects.has('__collapsed__' + taskKey)) {
-			content.style.display = 'none';
-			arrow.setText('▸');
-		}
-
-		// Render the task itself as the first item in the content
-		this.renderTaskItem(content, task, allTasks, 0);
-
-		// Render subtasks
-		const sortedSubtasks = sortTasks(subtasks);
-		for (const sub of sortedSubtasks) {
-			this.renderTaskItem(content, sub, allTasks, 1);
-		}
-
-		// Toggle expand/collapse
-		arrow.addEventListener('click', (e) => {
-			e.stopPropagation();
-			const isExpanded = !this.expandedProjects.has('__collapsed__' + taskKey);
-			if (isExpanded) {
-				this.expandedProjects.add('__collapsed__' + taskKey);
-				arrow.setText('▸');
-				content.style.display = 'none';
-			} else {
-				this.expandedProjects.delete('__collapsed__' + taskKey);
-				arrow.setText('▾');
-				content.style.display = '';
-			}
-		});
 	}
 
 	private openTaskCreator(projectName: string, allTasks: TodoistTask[]) {
@@ -634,7 +549,7 @@ export class TimerView extends ItemView {
 		const updateSubtaskDisplay = () => {
 			subtaskContainer.empty();
 			if (!this.expandedTasks.has(task.id)) return;
-			for (const sub of subtasks) {
+			for (const sub of sortTasks(subtasks)) {
 				this.renderTaskItem(subtaskContainer, sub, allTasks, depth + 1);
 			}
 		};

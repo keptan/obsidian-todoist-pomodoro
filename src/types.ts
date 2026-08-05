@@ -1,17 +1,3 @@
-export interface CalendarConfig {
-	url: string;
-	color: string; // hex color for border highlight
-}
-
-export interface CalendarEvent {
-	uid: string;
-	summary: string;
-	start: string; // YYYY-MM-DD or ISO datetime
-	end: string;   // YYYY-MM-DD or ISO datetime
-	allDay: boolean;
-	calendarColor: string; // color from the calendar config
-}
-
 export interface MikumodoroSettings {
 	todoistApiToken: string;
 	defaultWorkMinutes: number;
@@ -22,7 +8,6 @@ export interface MikumodoroSettings {
 	soundEnabled: boolean;
 	notificationsEnabled: boolean;
 	sessionsHeight: number;
-	calendars: CalendarConfig[];
 }
 
 export const DEFAULT_SETTINGS: MikumodoroSettings = {
@@ -35,7 +20,6 @@ export const DEFAULT_SETTINGS: MikumodoroSettings = {
 	soundEnabled: true,
 	notificationsEnabled: true,
 	sessionsHeight: 0,
-	calendars: [],
 };
 
 export interface TodoistTask {

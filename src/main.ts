@@ -13,10 +13,8 @@ import { TodoistClient } from './todoist';
 import { TimerEngine } from './timer';
 import { TimerView, TIMER_VIEW_TYPE } from './view';
 import { renderHeatmap } from './heatmap';
-import { GoogleCalendarClient } from './gcal';
 import { formatLocalDate } from './utils';
 import { SerializedSaveQueue } from './persistence';
-import type { CalendarEvent } from './types';
 
 export default class MikumodoroTimerPlugin extends Plugin {
 	settings!: MikumodoroSettings;
@@ -32,7 +30,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private saveTimer: number | null = null;
 	private saveQueue = new SerializedSaveQueue();
 	private lastDataSignature = '';
-	private cachedCalendarEvents: Map<string, CalendarEvent[]> = new Map();
 
 	private scheduleSave(delayMs = 2000) {
 		if (this.saveTimer !== null) return;
@@ -198,24 +195,12 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			this.refreshTasks();
 		}
 
-		// Auto-refresh calendar events on load
-		if (this.settings.calendars && this.settings.calendars.length > 0) {
-			this.refreshCalendarEvents();
-		}
-
 		// Auto-refresh tasks every 5 minutes
 		this.registerInterval(window.setInterval(() => {
 			if (this.settings.todoistApiToken) {
 				this.refreshTasks();
 			}
 		}, 5 * 60 * 1000));
-
-		// Auto-refresh calendar events every 10 minutes
-		this.registerInterval(window.setInterval(() => {
-			if (this.settings.calendars && this.settings.calendars.length > 0) {
-				this.refreshCalendarEvents();
-			}
-		}, 10 * 60 * 1000));
 
 		// Periodic save while timer is active
 		this.startPeriodicSave();
@@ -262,10 +247,16 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	}
 
 	async loadSettings() {
+		const savedData = (await this.loadData()) as Record<string, unknown> | null;
+		const savedSettings = Object.fromEntries(
+			Object.keys(DEFAULT_SETTINGS)
+				.filter((key) => savedData?.[key] !== undefined)
+				.map((key) => [key, savedData![key]]),
+		) as Partial<MikumodoroSettings>;
 		this.settings = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MikumodoroSettings>,
+			savedSettings,
 		);
 	}
 
@@ -455,40 +446,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			console.error('Mikumodoro: Failed to fetch Todoist tasks', err);
 			this.todoistConnected = false;
 		}
-	}
-
-	// --- Calendar Events ---
-
-	async refreshCalendarEvents() {
-		if (!this.settings.calendars || this.settings.calendars.length === 0) {
-			this.cachedCalendarEvents = new Map();
-			this.refreshHeatmaps();
-			return;
-		}
-		try {
-			const maps: Map<string, CalendarEvent[]>[] = [];
-			for (const cal of this.settings.calendars) {
-				if (!cal.url) continue;
-				try {
-					const events = await GoogleCalendarClient.fetchEvents(cal);
-					maps.push(events);
-				} catch (err) {
-					console.error('Mikumodoro: Failed to fetch calendar', cal.url, err);
-				}
-			}
-			this.cachedCalendarEvents = GoogleCalendarClient.mergeCalendars(maps);
-			this.refreshHeatmaps();
-		} catch (err) {
-			console.error('Mikumodoro: Failed to refresh calendar events', err);
-		}
-	}
-
-	getCalendarEventsForDate(dateStr: string): CalendarEvent[] {
-		return this.cachedCalendarEvents.get(dateStr) ?? [];
-	}
-
-	getCachedCalendarEvents(): Map<string, CalendarEvent[]> {
-		return this.cachedCalendarEvents;
 	}
 
 	// Complete the selected task in Todoist and record completion
@@ -738,7 +695,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	private renderHeatmapBlock(el: HTMLElement, _source: string) {
 		const wrapper = el.createDiv({ cls: 'mikumodoro-heatmap-container' });
-		renderHeatmap(wrapper, this.timerEngine.getSessions(), this.settings, this, this.cachedCalendarEvents);
+		renderHeatmap(wrapper, this.timerEngine.getSessions(), this.settings, this);
 		this.heatmapElements.add(wrapper);
 	}
 
@@ -746,7 +703,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		const sessions = this.timerEngine.getSessions();
 		const completions = this.getCompletionMap();
 		const tasks = this.cachedTasks;
-		const calEvents = this.cachedCalendarEvents;
 		const sessionSig = sessions
 			.map(s => `${s.id}:${s.startTime}:${s.endTime}:${s.durationMinutes}:${s.completed}`)
 			.join('|');
@@ -758,11 +714,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			.map(t => `${t.id}:${t.content}:${t.due?.date ?? ''}:${t.checked ?? ''}`)
 			.sort()
 			.join('|');
-		const calendarSig = Array.from(calEvents.entries())
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([date, events]) => `${date}:${events.map(e => `${e.uid}:${e.start}:${e.end}:${e.calendarColor}`).sort().join(',')}`)
-			.join('|');
-		const sig = `${sessionSig}||${completionSig}||${taskSig}||${calendarSig}`;
+		const sig = `${sessionSig}||${completionSig}||${taskSig}`;
 		if (sig === this.lastDataSignature) {
 			// Data unchanged, skip re-render
 			return;
@@ -771,7 +723,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		for (const el of this.heatmapElements) {
 			if (el.isConnected) {
 				el.empty();
-				renderHeatmap(el, sessions, this.settings, this, calEvents);
+				renderHeatmap(el, sessions, this.settings, this);
 			} else {
 				this.heatmapElements.delete(el);
 			}

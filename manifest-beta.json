@@ -1,9 +1,10 @@
 {
-	"id": "obsidian-todoist-pomodoro",
+	"id": "todoist-pomodoro-heatmap",
 	"name": "Mikumodoro Timer",
-	"version": "0.2.0",
+	"version": "0.3.2",
 	"minAppVersion": "1.7.2",
 	"description": "Mikumodoro timer with Todoist integration and pomodoro heatmap.",
 	"author": "wavey",
+	"authorUrl": "https://github.com/keptan",
 	"isDesktopOnly": false
 }
