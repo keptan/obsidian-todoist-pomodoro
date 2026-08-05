@@ -1,6 +1,6 @@
 # Todoist Pomodoro Heatmap
 
-An Obsidian timer that combines Flowmodoro-style work sessions with Todoist tasks and a contribution heatmap.
+An Obsidian Pomodoro timer with Todoist tasks and a contribution heatmap.
 
 ## Features
 

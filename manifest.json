@@ -3,7 +3,7 @@
 	"name": "Todoist Pomodoro Heatmap",
 	"version": "0.3.2",
 	"minAppVersion": "1.7.2",
-	"description": "Track Todoist tasks with a Flowmodoro timer and contribution heatmap.",
+	"description": "Track Todoist tasks with a Pomodoro timer and contribution heatmap.",
 	"author": "wavey",
 	"authorUrl": "https://github.com/keptan",
 	"isDesktopOnly": false
