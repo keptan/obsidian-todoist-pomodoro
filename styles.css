@@ -248,6 +248,32 @@
 	flex-shrink: 0;
 }
 
+.mikumodoro-task-priority.priority-4 { color: #ef4444; }
+.mikumodoro-task-priority.priority-3 { color: #f97316; }
+.mikumodoro-task-priority.priority-2 { color: #3b82f6; }
+
+.mikumodoro-project-content.is-collapsed { display: none; }
+
+.mikumodoro-modal-suggestions-limited { max-height: 300px; }
+
+.mikumodoro-modal-suggestion-header {
+	font-size: 0.7em;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	padding: 4px 12px 2px;
+}
+
+.mikumodoro-modal-suggestion-project {
+	color: var(--text-muted);
+	font-size: 0.85em;
+}
+
+body.mikumodoro-is-resizing {
+	cursor: row-resize;
+	user-select: none;
+}
+
 /* Subtask container */
 .mikumodoro-subtask-container {
 	/* children are .mikumodoro-task-wrapper */
@@ -658,6 +684,8 @@
 	color: var(--text-normal);
 	box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
+
+.mikumodoro-heatmap-tooltip.is-visible { display: block; }
 
 /* Month view */
 .mikumodoro-heatmap-month-header {

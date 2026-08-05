@@ -374,7 +374,7 @@ function attachTooltips(container: HTMLElement) {
 		const text = target.getAttribute('data-tooltip');
 		if (!text) return;
 		tooltipEl.textContent = text;
-		tooltipEl.style.display = 'block';
+		tooltipEl.classList.add('is-visible');
 		const rect = target.getBoundingClientRect();
 		const tipRect = tooltipEl.getBoundingClientRect();
 		let left = rect.left + rect.width / 2 - tipRect.width / 2;
@@ -390,12 +390,12 @@ function attachTooltips(container: HTMLElement) {
 		if (target) {
 			show(target);
 		} else {
-			tooltipEl.style.display = 'none';
+			tooltipEl.classList.remove('is-visible');
 		}
 	});
 
 	container.addEventListener('mouseleave', () => {
-		tooltipEl.style.display = 'none';
+		tooltipEl.classList.remove('is-visible');
 	});
 }
 

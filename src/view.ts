@@ -27,7 +27,7 @@ export class TimerView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Todoist Pomodoro Heatmap';
+		return 'Todoist pomodoro heatmap';
 	}
 
 	getIcon(): string {
@@ -150,11 +150,11 @@ export class TimerView extends ItemView {
 		const muteBtn = timerRow.createEl('button', { cls: 'mikumodoro-mute-btn' });
 		setIcon(muteBtn, this.plugin.settings.soundEnabled ? 'volume-2' : 'volume-x');
 		muteBtn.setAttribute('aria-label', this.plugin.settings.soundEnabled ? 'Mute chime' : 'Unmute chime');
-		muteBtn.addEventListener('click', async () => {
+		muteBtn.addEventListener('click', () => void (async () => {
 			this.plugin.settings.soundEnabled = !this.plugin.settings.soundEnabled;
 			await this.plugin.saveSettings();
 			this.render();
-		});
+		})());
 
 		// Current task
 		const selected = this.plugin.getSelectedTask();
@@ -174,7 +174,7 @@ export class TimerView extends ItemView {
 		if (state.mode === 'idle') {
 			const startBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-primary',
-				text: 'Start Work',
+				text: 'Start work',
 			});
 			startBtn.addEventListener('click', () => {
 				const task = this.plugin.getSelectedTask();
@@ -189,7 +189,7 @@ export class TimerView extends ItemView {
 		} else if (state.mode === 'working') {
 			const stopBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-stop',
-				text: 'End Session',
+				text: 'End session',
 			});
 			stopBtn.addEventListener('click', () => {
 				this.plugin.timerEngine.startBreak();
@@ -205,7 +205,7 @@ export class TimerView extends ItemView {
 		} else if (state.mode === 'break') {
 			const skipBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-secondary',
-				text: 'Skip Break',
+				text: 'Skip break',
 			});
 			skipBtn.addEventListener('click', () => {
 				this.plugin.timerEngine.skipBreak();
@@ -213,7 +213,7 @@ export class TimerView extends ItemView {
 
 			const extendBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-secondary',
-				text: '🏋️ Double Break',
+				text: '🏋️ double break',
 			});
 			this.extendBtnEl = extendBtn;
 			if (this.plugin.timerEngine.isBreakExtended()) {
@@ -274,13 +274,13 @@ export class TimerView extends ItemView {
 			// Refresh button in empty state
 			const refreshBtn = container.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-secondary',
-				text: 'Refresh Tasks',
+				text: 'Refresh tasks',
 			});
-			refreshBtn.addEventListener('click', async () => {
+			refreshBtn.addEventListener('click', () => void (async () => {
 				refreshBtn.setText('Loading...');
 				await this.plugin.refreshTasks();
 				this.render();
-			});
+			})());
 			return;
 		}
 
@@ -295,12 +295,12 @@ export class TimerView extends ItemView {
 			attr: { 'aria-label': 'Refresh tasks' },
 		});
 		refreshIcon.setText('⟳');
-		refreshIcon.addEventListener('click', async () => {
+		refreshIcon.addEventListener('click', () => void (async () => {
 			refreshIcon.classList.add('spinning');
 			await this.plugin.refreshTasks();
 			refreshIcon.classList.remove('spinning');
 			this.render();
-		});
+		})());
 
 		const listEl = sectionEl.createDiv({ cls: 'mikumodoro-task-list' });
 
@@ -375,7 +375,7 @@ export class TimerView extends ItemView {
 			const projectContent = listEl.createDiv({ cls: 'mikumodoro-project-content' });
 			// Projects start collapsed and remain expanded until explicitly closed.
 			if (!this.expandedProjectIds.has(projectId)) {
-				projectContent.style.display = 'none';
+				projectContent.classList.add('is-collapsed');
 				projectArrow.setText('▸');
 			}
 
@@ -389,11 +389,11 @@ export class TimerView extends ItemView {
 				if (isExpanded) {
 					this.expandedProjectIds.delete(projectId);
 					projectArrow.setText('▸');
-					projectContent.style.display = 'none';
+					projectContent.classList.add('is-collapsed');
 				} else {
 					this.expandedProjectIds.add(projectId);
 					projectArrow.setText('▾');
-					projectContent.style.display = '';
+					projectContent.classList.remove('is-collapsed');
 				}
 			});
 		}
@@ -432,7 +432,7 @@ export class TimerView extends ItemView {
 			if (e.key === 'Enter') {
 				const content = inputEl.value.trim();
 				if (content) {
-					this.createTaskInProject(projectName, allTasks, content);
+					void this.createTaskInProject(projectName, allTasks, content);
 					modal.close();
 				}
 			}
@@ -445,7 +445,7 @@ export class TimerView extends ItemView {
 		createBtn.addEventListener('click', () => {
 			const content = inputEl.value.trim();
 			if (content) {
-				this.createTaskInProject(projectName, allTasks, content);
+				void this.createTaskInProject(projectName, allTasks, content);
 				modal.close();
 			}
 		});
@@ -502,9 +502,7 @@ export class TimerView extends ItemView {
 		if (task.priority && task.priority > 1) {
 			const priorityEl = item.createSpan({ cls: 'mikumodoro-task-priority' });
 			priorityEl.setText('●');
-			if (task.priority === 4) priorityEl.style.color = '#ef4444';
-			else if (task.priority === 3) priorityEl.style.color = '#f97316';
-			else if (task.priority === 2) priorityEl.style.color = '#3b82f6';
+			priorityEl.classList.add(`priority-${task.priority}`);
 		}
 
 		// Due date
@@ -542,7 +540,7 @@ export class TimerView extends ItemView {
 				openNoteBtn.setText('📂');
 				openNoteBtn.addEventListener('click', (e) => {
 					e.stopPropagation();
-					this.app.workspace.openLinkText(notePath, '', false);
+					void this.app.workspace.openLinkText(notePath, '', false);
 				});
 			} else {
 				const linkBtn = item.createEl('button', {
@@ -663,41 +661,41 @@ export class TimerView extends ItemView {
 		// Complete task button
 		const completeBtn = actionsEl.createEl('button', {
 			cls: 'mikumodoro-btn-mini mikumodoro-btn-complete',
-			text: '✓ Complete',
+			text: '✓ complete',
 		});
-		completeBtn.addEventListener('click', async (e) => {
+		completeBtn.addEventListener('click', (e) => void (async () => {
 			e.stopPropagation();
 			completeBtn.disabled = true;
 			completeBtn.setText('Completing...');
 			await this.plugin.completeSelectedTask();
 			this.render();
-		});
+		})());
 
 		// Note linking
 		const notePath = this.plugin.getTaskNotePath(task.id);
 		if (notePath) {
 			const openBtn = actionsEl.createEl('button', {
 				cls: 'mikumodoro-btn-mini',
-				text: '📂 Open Note',
+				text: '📂 Open note',
 			});
 			openBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				this.app.workspace.openLinkText(notePath, '', false);
+				void this.app.workspace.openLinkText(notePath, '', false);
 			});
 
 			const unlinkBtn = actionsEl.createEl('button', {
 				cls: 'mikumodoro-btn-mini',
-				text: '✕ Unlink',
+				text: '✕ unlink',
 			});
 			unlinkBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
-				this.plugin.unlinkTaskNote(task.id);
+				void this.plugin.unlinkTaskNote(task.id);
 				this.render();
 			});
 		} else {
 			const linkBtn = actionsEl.createEl('button', {
 				cls: 'mikumodoro-btn-mini',
-				text: '🔗 Link Note',
+				text: '🔗 Link note',
 			});
 			linkBtn.addEventListener('click', (e) => {
 				e.stopPropagation();
@@ -708,7 +706,7 @@ export class TimerView extends ItemView {
 		// Subtask creation
 		const addSubBtn = actionsEl.createEl('button', {
 			cls: 'mikumodoro-btn-mini',
-			text: '＋ Subtask',
+			text: '＋ subtask',
 		});
 		addSubBtn.addEventListener('click', (e) => {
 			e.stopPropagation();
@@ -718,7 +716,7 @@ export class TimerView extends ItemView {
 
 	private openNoteLinker(task: TodoistTask) {
 		const modal = new Modal(this.app);
-		modal.titleEl.setText('Link Obsidian Note');
+		modal.titleEl.setText('Link Obsidian note');
 
 		modal.contentEl.createEl('p', {
 			text: `Link a note to "${task.content}". Type a note name or search:`,
@@ -752,7 +750,7 @@ export class TimerView extends ItemView {
 						text: file.path,
 					});
 					result.addEventListener('click', () => {
-						this.plugin.linkTaskNote(task.id, file.path);
+						void this.plugin.linkTaskNote(task.id, file.path);
 						modal.close();
 						this.render();
 					});
@@ -767,7 +765,7 @@ export class TimerView extends ItemView {
 		linkBtn.addEventListener('click', () => {
 			const path = inputEl.value.trim();
 			if (path) {
-				this.plugin.linkTaskNote(task.id, path.endsWith('.md') ? path : path + '.md');
+				void this.plugin.linkTaskNote(task.id, path.endsWith('.md') ? path : path + '.md');
 				modal.close();
 				this.render();
 			}
@@ -779,7 +777,7 @@ export class TimerView extends ItemView {
 
 	private openSubtaskCreator(parent: TodoistTask) {
 		const modal = new Modal(this.app);
-		modal.titleEl.setText('New Subtask');
+		modal.titleEl.setText('New subtask');
 
 		modal.contentEl.createEl('p', {
 			text: `Create a subtask under "${parent.content}":`,
@@ -796,7 +794,7 @@ export class TimerView extends ItemView {
 			if (e.key === 'Enter') {
 				const content = inputEl.value.trim();
 				if (content) {
-					this.createSubtask(parent, content);
+					void this.createSubtask(parent, content);
 					modal.close();
 				}
 			}
@@ -809,7 +807,7 @@ export class TimerView extends ItemView {
 		createBtn.addEventListener('click', () => {
 			const content = inputEl.value.trim();
 			if (content) {
-				this.createSubtask(parent, content);
+				void this.createSubtask(parent, content);
 				modal.close();
 			}
 		});
@@ -841,7 +839,7 @@ export class TimerView extends ItemView {
 		});
 
 		const suggestionsEl = modal.contentEl.createDiv({ cls: 'mikumodoro-modal-suggestions' });
-		suggestionsEl.style.maxHeight = '300px';
+		suggestionsEl.classList.add('mikumodoro-modal-suggestions-limited');
 
 		const todoistTasks = this.plugin.getCachedTasks();
 		const customLabels = this.plugin.getCustomActivityLabels();
@@ -861,18 +859,17 @@ export class TimerView extends ItemView {
 				.slice(0, 15);
 
 			if (customMatched.length > 0) {
-				const header = suggestionsEl.createDiv({
+				suggestionsEl.createDiv({
 					cls: 'mikumodoro-modal-suggestion-header',
 					text: 'Recent Activities',
 				});
-				header.style.cssText = 'font-size:0.7em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;padding:4px 12px 2px;';
 				for (const label of customMatched) {
 					const item = suggestionsEl.createDiv({
 						cls: 'mikumodoro-modal-suggestion-item',
 						text: '\u26a1 ' + label,
 					});
 					item.addEventListener('click', () => {
-						this.plugin.trackCustomActivity(label);
+						void this.plugin.trackCustomActivity(label);
 						modal.close();
 						this.render();
 					});
@@ -880,22 +877,20 @@ export class TimerView extends ItemView {
 			}
 
 			if (taskMatched.length > 0) {
-				const header = suggestionsEl.createDiv({
+				suggestionsEl.createDiv({
 					cls: 'mikumodoro-modal-suggestion-header',
 					text: 'Todoist Tasks',
 				});
-				header.style.cssText = 'font-size:0.7em;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;padding:4px 12px 2px;';
 				for (const task of taskMatched) {
 					const item = suggestionsEl.createDiv({
 						cls: 'mikumodoro-modal-suggestion-item',
 						text: task.content,
 					});
 					if (task.project_name && task.project_name !== 'Inbox') {
-						const proj = item.createSpan({
+						item.createSpan({
 							cls: 'mikumodoro-modal-suggestion-project',
 							text: ' ' + task.project_name,
 						});
-						proj.style.cssText = 'color:var(--text-muted);font-size:0.85em;';
 					}
 					item.addEventListener('click', () => {
 						this.plugin.setSelectedTask(task);
@@ -912,7 +907,7 @@ export class TimerView extends ItemView {
 					text: '\u26a1 Start custom: "' + filter.trim() + '"',
 					attr: { style: 'color:var(--interactive-accent);' },
 				}).addEventListener('click', () => {
-					this.plugin.trackCustomActivity(filter.trim());
+					void this.plugin.trackCustomActivity(filter.trim());
 					modal.close();
 					this.render();
 				});
@@ -930,7 +925,7 @@ export class TimerView extends ItemView {
 					this.plugin.setSelectedTask(match);
 					this.plugin.timerEngine.startWork(match);
 				} else {
-					this.plugin.trackCustomActivity(val);
+					void this.plugin.trackCustomActivity(val);
 				}
 				modal.close();
 				this.render();
@@ -960,10 +955,10 @@ export class TimerView extends ItemView {
 
 	private openActivityTracker() {
 		const modal = new Modal(this.app);
-		modal.titleEl.setText('Track Activity');
+		modal.titleEl.setText('Track activity');
 
 		modal.contentEl.createEl('p', {
-			text: 'Start a pomodoro for something outside your Todoist tasks:',
+			text: 'Start a pomodoro for something outside your todoist tasks:',
 			cls: 'mikumodoro-modal-desc',
 		});
 
@@ -1001,7 +996,7 @@ export class TimerView extends ItemView {
 			if (e.key === 'Enter') {
 				const label = inputEl.value.trim();
 				if (label) {
-					this.plugin.trackCustomActivity(label);
+					void this.plugin.trackCustomActivity(label);
 					modal.close();
 					this.render();
 				}
@@ -1015,7 +1010,7 @@ export class TimerView extends ItemView {
 		startBtn.addEventListener('click', () => {
 			const label = inputEl.value.trim();
 			if (label) {
-				this.plugin.trackCustomActivity(label);
+				void this.plugin.trackCustomActivity(label);
 				modal.close();
 				this.render();
 			}
@@ -1027,7 +1022,7 @@ export class TimerView extends ItemView {
 
 	private openManualTimeLogger() {
 		const modal = new Modal(this.app);
-		modal.titleEl.setText('Log Time');
+		modal.titleEl.setText('Log time');
 
 		modal.contentEl.createEl('p', {
 			text: 'Add time for something you already did:',
@@ -1096,9 +1091,9 @@ export class TimerView extends ItemView {
 
 		const addBtn = modal.contentEl.createEl('button', {
 			cls: 'mikumodoro-btn mikumodoro-btn-primary',
-			text: 'Add Time',
+			text: 'Add time',
 		});
-		addBtn.addEventListener('click', async () => {
+		addBtn.addEventListener('click', () => void (async () => {
 			const label = inputEl.value.trim();
 			if (!label) return;
 			const minutes = parseInt(slider.value);
@@ -1108,7 +1103,7 @@ export class TimerView extends ItemView {
 			new Notice(`Logged ${minutes}m for "${label}"`);
 			modal.close();
 			this.render();
-		});
+		})());
 
 		inputEl.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter') addBtn.click();
@@ -1145,8 +1140,7 @@ export class TimerView extends ItemView {
 			startY = e.clientY;
 			startHeight = section.offsetHeight;
 			section.classList.add('resizing');
-			document.body.style.cursor = 'row-resize';
-			document.body.style.userSelect = 'none';
+			document.body.classList.add('mikumodoro-is-resizing');
 		});
 
 		const onMove = (e: MouseEvent) => {
@@ -1160,8 +1154,7 @@ export class TimerView extends ItemView {
 			if (!isResizing) return;
 			isResizing = false;
 			section.classList.remove('resizing');
-			document.body.style.cursor = '';
-			document.body.style.userSelect = '';
+			document.body.classList.remove('mikumodoro-is-resizing');
 			this.plugin.settings.sessionsHeight = section.offsetHeight;
 			void this.plugin.saveSettings().catch(err => {
 				console.error('Mikumodoro: Failed to save sessions panel height', err);
@@ -1170,8 +1163,7 @@ export class TimerView extends ItemView {
 		const cleanup = () => {
 			if (isResizing) {
 				isResizing = false;
-				document.body.style.cursor = '';
-				document.body.style.userSelect = '';
+				document.body.classList.remove('mikumodoro-is-resizing');
 			}
 			document.removeEventListener('mousemove', onMove);
 			document.removeEventListener('mouseup', onUp);

@@ -89,7 +89,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 		// Save sessions when one completes
 		this.timerEngine.setOnSessionComplete((session) => {
-			this.writePendingSession(session).catch(err => console.error('Mikumodoro: Failed to write pending session file', err));
+			void this.writePendingSession(session).catch(err => console.error('Mikumodoro: Failed to write pending session file', err));
 			void this.savePluginData().catch(err => {
 				console.error('Mikumodoro: Failed to save completed session', err);
 			});
@@ -110,8 +110,8 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		this.registerView(TIMER_VIEW_TYPE, (leaf) => new TimerView(leaf, this));
 
 		// Ribbon icon
-		this.addRibbonIcon('timer', 'Todoist Pomodoro Heatmap', () => {
-			this.activateView();
+		this.addRibbonIcon('timer', 'Todoist pomodoro heatmap', () => {
+			void this.activateView();
 		});
 
 		// Status bar
@@ -120,7 +120,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			const state = this.timerEngine.getState();
 			const elapsed = this.timerEngine.getElapsedMs();
 			if (state.mode === 'idle') {
-				statusBarItemEl.setText('🍅 Todoist Pomodoro');
+				statusBarItemEl.setText('🍅 Todoist pomodoro');
 			} else {
 				const min = Math.floor(elapsed / 60000);
 				const sec = Math.floor((elapsed % 60000) / 1000);
@@ -137,7 +137,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		this.addCommand({
 			id: 'open-timer-view',
 			name: 'Open timer',
-			callback: () => this.activateView(),
+			callback: () => void this.activateView(),
 		});
 
 		this.addCommand({
@@ -145,13 +145,13 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			name: 'Start work session',
 			callback: () => {
 				this.timerEngine.startWork(this.selectedTask);
-				this.activateView();
+				void this.activateView();
 			},
 		});
 
 		this.addCommand({
 			id: 'stop-timer',
-			name: 'Stop timer / Start break',
+			name: 'Stop timer / start break',
 			callback: () => {
 				const state = this.timerEngine.getState();
 				if (state.mode === 'working') {
@@ -172,14 +172,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'refresh-tasks',
-			name: 'Refresh Todoist tasks',
-			callback: () => this.refreshTasks(),
+			name: 'Refresh todoist tasks',
+			callback: () => void this.refreshTasks(),
 		});
 
 		this.addCommand({
 			id: 'complete-task',
 			name: 'Complete selected task',
-			callback: () => this.completeSelectedTask(),
+			callback: () => void this.completeSelectedTask(),
 		});
 
 		// Settings tab
@@ -192,13 +192,13 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 		// Auto-refresh tasks on load
 		if (this.settings.todoistApiToken) {
-			this.refreshTasks();
+			void this.refreshTasks();
 		}
 
 		// Auto-refresh tasks every 5 minutes
 		this.registerInterval(window.setInterval(() => {
 			if (this.settings.todoistApiToken) {
-				this.refreshTasks();
+					void this.refreshTasks();
 			}
 		}, 5 * 60 * 1000));
 
@@ -207,20 +207,19 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 		// Periodic data reload from disk (only refresh views if data changed)
 		this.registerInterval(window.setInterval(() => {
-			this.reloadFromDisk();
+			void this.reloadFromDisk();
 		}, 60000));
 
 		// Auto-fetch completed history on boot if we don't have it yet
 		if (this.settings.todoistApiToken) {
 			const hasHistory = Object.keys(this.completionMap).length > 0;
 			if (!hasHistory) {
-				console.log('Mikumodoro: No completion history found, fetching from Todoist...');
-				this.syncCompletedHistory().catch(err => {
+				void this.syncCompletedHistory().catch(err => {
 					console.error('Mikumodoro: Auto history fetch failed', err);
 				});
 			} else {
 				// Still sync on boot for safekeeping (merge new completions)
-				this.syncCompletedHistory().catch(err => {
+				void this.syncCompletedHistory().catch(err => {
 					console.error('Mikumodoro: Boot history sync failed', err);
 				});
 			}
@@ -228,11 +227,15 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 		// Request notification permission if enabled
 		if (this.settings.notificationsEnabled && 'Notification' in window) {
-			Notification.requestPermission();
+			void Notification.requestPermission();
 		}
 	}
 
-	async onunload() {
+	onunload() {
+		void this.unloadAsync();
+	}
+
+	private async unloadAsync(): Promise<void> {
 		// Flush any pending save before destroying
 		const hadScheduledSave = this.saveTimer !== null;
 		if (this.saveTimer !== null) {
@@ -287,7 +290,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				if (!(await this.app.vault.adapter.exists(current))) {
 					await this.app.vault.adapter.mkdir(current);
 				}
-			} catch (err) {
+			} catch {
 				// Directory might already exist, ignore
 			}
 		}
@@ -320,14 +323,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				for (const file of listing.files) {
 					try {
 						const content = await this.app.vault.adapter.read(file);
-						const session: PomodoroSession = JSON.parse(content);
+						const session = JSON.parse(content) as PomodoroSession;
 						this.timerEngine.mergeSessions([session]);
 						changed = true;
 						await this.app.vault.adapter.remove(file);
 					} catch (err) {
 						console.error('Mikumodoro: Failed to merge pending session file', file, err);
 						// Delete corrupt file to prevent infinite retry loop
-						try { await this.app.vault.adapter.remove(file); } catch {}
+						try { await this.app.vault.adapter.remove(file); } catch { /* already removed */ }
 					}
 				}
 			}
@@ -342,7 +345,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				for (const file of listing.files) {
 					try {
 						const content = await this.app.vault.adapter.read(file);
-						const data = JSON.parse(content);
+						const data = JSON.parse(content) as { dateStr: string } & CompletionRecord;
 						const dateStr: string = data.dateStr;
 						const record: CompletionRecord = {
 							taskId: data.taskId,
@@ -360,7 +363,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 						await this.app.vault.adapter.remove(file);
 					} catch (err) {
 						console.error('Mikumodoro: Failed to merge pending completion file', file, err);
-						try { await this.app.vault.adapter.remove(file); } catch {}
+						try { await this.app.vault.adapter.remove(file); } catch { /* already removed */ }
 					}
 				}
 			}
@@ -387,7 +390,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		}
 		if (leaf) {
-			workspace.revealLeaf(leaf);
+			void workspace.revealLeaf(leaf);
 		}
 	}
 
@@ -487,7 +490,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		try {
 			// Pull completed tasks from the sync API
 			const completed = await this.todoistClient.getCompletedTasks();
-			let count = 0;
 			for (const item of completed) {
 				const dateStr = formatLocalDate(new Date(item.completed_at));
 				if (!this.completionMap[dateStr]) {
@@ -503,11 +505,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 					};
 					this.completionMap[dateStr].push(completionRecord);
 					await this.writePendingCompletion(dateStr, completionRecord);
-					count++;
 				}
 			}
 			await this.savePluginData();
-			console.log(`Mikumodoro: Synced ${count} completed tasks`);
 			this.lastDataSignature = ''; // force heatmap refresh
 			this.refreshHeatmaps();
 		} catch (err) {
@@ -687,7 +687,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 
 			// Close context after chime finishes
-			window.setTimeout(() => ctx.close(), 1000);
+			window.setTimeout(() => void ctx.close(), 1000);
 		} catch (err) {
 			console.error('Mikumodoro: Failed to play chime', err);
 		}
@@ -741,7 +741,12 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			console.error('Mikumodoro: Failed to read data.json from disk', err);
 			return;
 		}
-		const data = rawData ? JSON.parse(rawData) : {};
+		const data = (rawData ? JSON.parse(rawData) : {}) as {
+			sessions?: PomodoroSession[];
+			completions?: CompletionMap;
+			taskNotes?: TaskNoteMap;
+			customActivityLabels?: string[];
+		};
 		if (!data) return;
 		let changed = false;
 
@@ -759,7 +764,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 		// --- Completions: deep merge by date + taskId ---
 		if (data.completions && typeof data.completions === 'object') {
-			const diskCompletions = data.completions as CompletionMap;
+			const diskCompletions = data.completions;
 			for (const dateStr of Object.keys(diskCompletions)) {
 				const diskRecords = diskCompletions[dateStr] ?? [];
 				const localRecords = this.completionMap[dateStr] ?? [];
@@ -778,7 +783,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 		// --- Task notes: deep merge by taskId ---
 		if (data.taskNotes && typeof data.taskNotes === 'object') {
-			const diskNotes = data.taskNotes as TaskNoteMap;
+			const diskNotes = data.taskNotes;
 			for (const taskId of Object.keys(diskNotes)) {
 				const diskPath = diskNotes[taskId];
 				if (diskPath && this.taskNoteMap[taskId] !== diskPath) {
@@ -790,7 +795,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 		// --- Custom activity labels: merge by value ---
 		if (data.customActivityLabels && Array.isArray(data.customActivityLabels)) {
-			const diskLabels = data.customActivityLabels as string[];
+			const diskLabels = data.customActivityLabels;
 			for (const label of diskLabels) {
 				if (!this.customActivityLabels.includes(label)) {
 					this.customActivityLabels.push(label);

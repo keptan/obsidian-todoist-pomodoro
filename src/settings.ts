@@ -3,6 +3,7 @@ import {
 	Notice,
 	PluginSettingTab,
 	Setting,
+	type SettingDefinitionItem,
 } from 'obsidian';
 import type MikumodoroTimerPlugin from './main';
 import { DEFAULT_SETTINGS } from './types';
@@ -15,22 +16,41 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return [{
+			name: 'Mikumodoro settings',
+			aliases: [
+				'Todoist API token',
+				'Test connection',
+				'Default work duration',
+				'Break ratio',
+				'Auto-start break',
+				'Sound chime on break',
+				'System notifications',
+				'Heatmap color',
+				'Heatmap default view',
+				'Reset settings',
+			],
+			render: (setting) => {
+				setting.settingEl.empty();
+				this.renderSettings(setting.settingEl);
+			},
+		}];
+	}
 
-		;
+	private renderSettings(containerEl: HTMLElement): void {
+		containerEl.empty();
 
 		// Connection status indicator
 		const statusEl = containerEl.createDiv({ cls: 'mikumodoro-connection-status' });
 		this.renderConnectionStatus(statusEl);
 
 		const tokenSetting = new Setting(containerEl)
-			.setName('Todoist API Token')
-			.setDesc('Your Todoist API token. Get it from Todoist Settings > Integrations > Developer.')
+			.setName('Todoist API token')
+			.setDesc('Your todoist API token. Get it from todoist settings > integrations > developer.')
 			.addText((text) =>
 				text
-					.setPlaceholder('Enter your Todoist API token')
+					.setPlaceholder('Enter your todoist API token')
 					.setValue(this.plugin.settings.todoistApiToken)
 					.onChange(async (value) => {
 						this.plugin.settings.todoistApiToken = value;
@@ -43,8 +63,8 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 
 		tokenSetting.addButton((btn) =>
 			btn
-				.setButtonText('Test Connection')
-				.setTooltip('Test your Todoist API token')
+				.setButtonText('Test connection')
+				.setTooltip('Test your todoist API token')
 				.onClick(async () => {
 					if (!this.plugin.settings.todoistApiToken) {
 						new Notice('Enter your API token first');
@@ -65,7 +85,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 						new Notice('Failed to connect. Check your API token.');
 						this.renderConnectionStatus(statusEl);
 					}
-					btn.setButtonText('Test Connection');
+					btn.setButtonText('Test connection');
 					btn.setDisabled(false);
 				})
 		);
@@ -136,7 +156,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 						this.plugin.settings.notificationsEnabled = value;
 						await this.plugin.saveSettings();
 						if (value && 'Notification' in window) {
-							Notification.requestPermission();
+							void Notification.requestPermission();
 						}
 					})
 			);
@@ -174,11 +194,11 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 			.addButton((btn) =>
 				btn
 					.setButtonText('Reset')
-					.setWarning()
+					.setDestructive()
 					.onClick(async () => {
 						this.plugin.settings = { ...DEFAULT_SETTINGS };
 						await this.plugin.saveSettings();
-						this.display();
+						this.update();
 					})
 			);
 	}
