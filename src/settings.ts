@@ -88,7 +88,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Break ratio')
-			.setDesc('Break duration = work duration / this ratio. Default 5 (mikumodoro style).')
+			.setDesc('Break duration = work duration / this ratio. Default 5 (Flowmodoro style).')
 			.addText((text) =>
 				text
 					.setPlaceholder('5')

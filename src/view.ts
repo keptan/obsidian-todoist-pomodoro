@@ -8,7 +8,7 @@ export const TIMER_VIEW_TYPE = 'obsidian-todoist-pomodoro-view';
 export class TimerView extends ItemView {
 	plugin: MikumodoroTimerPlugin;
 	private expandedTasks: Set<string> = new Set();
-	private expandedProjects: Set<string> = new Set();
+	private expandedProjectIds: Set<string> = new Set();
 	private lastRenderDate: string = '';
 	private timerDisplayEl: HTMLElement | null = null;
 	private extendBtnEl: HTMLButtonElement | null = null;
@@ -27,7 +27,7 @@ export class TimerView extends ItemView {
 	}
 
 	getDisplayText(): string {
-		return 'Mikumodoro Timer';
+		return 'Todoist Pomodoro Heatmap';
 	}
 
 	getIcon(): string {
@@ -99,6 +99,17 @@ export class TimerView extends ItemView {
 
 	private render() {
 		const { containerEl } = this;
+		const scrollSelectors = [
+			'.mikumodoro-scroll-content',
+			'.mikumodoro-task-selector',
+			'.mikumodoro-task-list',
+		];
+		const previousScrollPositions = new Map(
+			scrollSelectors.map((selector) => [
+				selector,
+				containerEl.querySelector<HTMLElement>(selector)?.scrollTop ?? 0,
+			]),
+		);
 		this.cleanupResizeHandlers();
 		containerEl.empty();
 		this.lastRenderDate = formatLocalDate(new Date());
@@ -243,6 +254,13 @@ export class TimerView extends ItemView {
 
 		// Bottom action bar (always visible, outside scroll area)
 		this.renderBottomActions(containerEl);
+
+		// Full renders replace the nested scroll containers. Restore each one so
+		// selecting or expanding a task does not jump the list back to the top.
+		for (const [selector, scrollTop] of previousScrollPositions) {
+			const scrollEl = containerEl.querySelector<HTMLElement>(selector);
+			if (scrollEl) scrollEl.scrollTop = scrollTop;
+		}
 	}
 
 	private renderTaskSelector(container: HTMLElement) {
@@ -331,7 +349,7 @@ export class TimerView extends ItemView {
 		);
 
 		// Render project groups
-		for (const [, group] of sortedProjects) {
+		for (const [projectId, group] of sortedProjects) {
 			const topLevelTasks = group.tasks.filter(t => !t.parent_id);
 			if (topLevelTasks.length === 0) continue;
 
@@ -355,9 +373,8 @@ export class TimerView extends ItemView {
 			});
 
 			const projectContent = listEl.createDiv({ cls: 'mikumodoro-project-content' });
-			const projectId = group.projectName;
-			// Default to expanded unless explicitly collapsed
-			if (this.expandedProjects.has('__collapsed__' + projectId)) {
+			// Projects start collapsed and remain expanded until explicitly closed.
+			if (!this.expandedProjectIds.has(projectId)) {
 				projectContent.style.display = 'none';
 				projectArrow.setText('▸');
 			}
@@ -368,13 +385,13 @@ export class TimerView extends ItemView {
 			}
 
 			projectHeader.addEventListener('click', () => {
-				const isExpanded = !this.expandedProjects.has('__collapsed__' + projectId);
+				const isExpanded = this.expandedProjectIds.has(projectId);
 				if (isExpanded) {
-					this.expandedProjects.add('__collapsed__' + projectId);
+					this.expandedProjectIds.delete(projectId);
 					projectArrow.setText('▸');
 					projectContent.style.display = 'none';
 				} else {
-					this.expandedProjects.delete('__collapsed__' + projectId);
+					this.expandedProjectIds.add(projectId);
 					projectArrow.setText('▾');
 					projectContent.style.display = '';
 				}

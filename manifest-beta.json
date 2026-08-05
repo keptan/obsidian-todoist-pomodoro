@@ -1,9 +1,9 @@
 {
 	"id": "todoist-pomodoro-heatmap",
-	"name": "Mikumodoro Timer",
+	"name": "Todoist Pomodoro Heatmap",
 	"version": "0.3.2",
 	"minAppVersion": "1.7.2",
-	"description": "Mikumodoro timer with Todoist integration and pomodoro heatmap.",
+	"description": "Track Todoist tasks with a Flowmodoro timer and contribution heatmap.",
 	"author": "wavey",
 	"authorUrl": "https://github.com/keptan",
 	"isDesktopOnly": false

@@ -110,7 +110,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		this.registerView(TIMER_VIEW_TYPE, (leaf) => new TimerView(leaf, this));
 
 		// Ribbon icon
-		this.addRibbonIcon('timer', 'Mikumodoro Timer', () => {
+		this.addRibbonIcon('timer', 'Todoist Pomodoro Heatmap', () => {
 			this.activateView();
 		});
 
@@ -120,7 +120,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			const state = this.timerEngine.getState();
 			const elapsed = this.timerEngine.getElapsedMs();
 			if (state.mode === 'idle') {
-				statusBarItemEl.setText('🍅 Mikumodoro');
+				statusBarItemEl.setText('🍅 Todoist Pomodoro');
 			} else {
 				const min = Math.floor(elapsed / 60000);
 				const sec = Math.floor((elapsed % 60000) / 1000);
@@ -136,7 +136,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		// Commands
 		this.addCommand({
 			id: 'open-timer-view',
-			name: 'Open Mikumodoro Timer',
+			name: 'Open timer',
 			callback: () => this.activateView(),
 		});
 
@@ -635,7 +635,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		// System notification
 		if (this.settings.notificationsEnabled && 'Notification' in window) {
 			if (Notification.permission === 'granted') {
-				new Notification('Mikumodoro', {
+				new Notification('Todoist Pomodoro Heatmap', {
 					body: 'Break time! Take a rest (≧▽≦)',
 					icon: '🍅',
 				});
@@ -649,7 +649,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 		if (this.settings.notificationsEnabled && 'Notification' in window) {
 			if (Notification.permission === 'granted') {
-				new Notification('Mikumodoro', {
+				new Notification('Todoist Pomodoro Heatmap', {
 					body: 'Break over! Back to work! (｡•̀ᴗ-)✧',
 					icon: '🍅',
 				});

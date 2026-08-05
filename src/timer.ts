@@ -73,7 +73,7 @@ export class TimerEngine {
 				if (this.state.mode === 'break' && this.breakDurationMs > 0) {
 					if (this.state.elapsedMs >= this.breakDurationMs) {
 						this.onBreakEnd?.();
-						new Notice('Mikumodoro: Break over! Ready for the next session? (≧▽≦)');
+						new Notice('Break over! Ready for the next session? (≧▽≦)');
 						this.stop();
 						return;
 					}
@@ -126,7 +126,7 @@ export class TimerEngine {
 		this.startInterval();
 		this.notify();
 		const taskName = task ? task.content : 'No task';
-		new Notice(`Mikumodoro: Working on "${taskName}"`);
+		new Notice(`Working on "${taskName}"`);
 	}
 
 	startBreak() {
@@ -171,7 +171,7 @@ export class TimerEngine {
 		this.onBreakStart?.();
 
 		const breakMin = Math.round(breakMs / 60000);
-		new Notice(`Mikumodoro: Break for ~${breakMin} minutes`);
+		new Notice(`Break for ~${breakMin} minutes`);
 	}
 
 	extendBreak(multiplier: number) {
@@ -181,7 +181,7 @@ export class TimerEngine {
 		this.breakDurationMs = Math.round(this.breakDurationMs * multiplier);
 		this.notify();
 		const remainMin = Math.round((this.breakDurationMs - this.state.elapsedMs) / 60000);
-		new Notice(`Mikumodoro: Break extended! ~${remainMin} min remaining`);
+		new Notice(`Break extended! ~${remainMin} min remaining`);
 	}
 
 	skipBreak() {
@@ -204,7 +204,7 @@ export class TimerEngine {
 
 		const taskName = this.state.task ? this.state.task.content : 'No task';
 		const extraMin = Math.round(remainingBreakMs / 60000);
-		new Notice(`Mikumodoro: Skipped break! +${extraMin}m added to next break. Back to "${taskName}" (≧▽≦)`);
+		new Notice(`Skipped break! +${extraMin}m added to next break. Back to "${taskName}" (≧▽≦)`);
 	}
 
 	stop() {
