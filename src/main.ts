@@ -15,6 +15,7 @@ import { TimerView, TIMER_VIEW_TYPE } from './view';
 import { renderHeatmap } from './heatmap';
 import { formatLocalDate } from './utils';
 import { SerializedSaveQueue } from './persistence';
+import { removeTaskTree } from './task-cache';
 
 export default class MikumodoroTimerPlugin extends Plugin {
 	settings!: MikumodoroSettings;
@@ -474,10 +475,12 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			await this.writePendingCompletion(dateStr, completionRecord);
 			await this.savePluginData();
 			new Notice(`Completed: ${task.content}`);
-			// Remove from cached tasks
-			this.cachedTasks = this.cachedTasks.filter(t => t.id !== task.id);
+			// Todoist closes a parent task's descendants too. Remove the full tree
+			// locally so the UI reflects the confirmed completion immediately.
+			this.cachedTasks = removeTaskTree(this.cachedTasks, task.id);
 			this.selectedTask = null;
 			this.refreshHeatmaps();
+			this.refreshViews();
 		} catch (err) {
 			console.error('Mikumodoro: Failed to complete task', err);
 			new Notice('Failed to complete task');

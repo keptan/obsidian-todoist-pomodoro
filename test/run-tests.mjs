@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const outputDir = await mkdtemp(join(tmpdir(), 'mikumodoro-tests-'));
 const obsidianMock = join(import.meta.dirname, 'obsidian-mock.mjs');
-const testFiles = ['timer.test.mjs', 'persistence.test.mjs'];
+const testFiles = ['timer.test.mjs', 'persistence.test.mjs', 'task-cache.test.mjs'];
 
 try {
 	await build({
