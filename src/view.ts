@@ -488,9 +488,11 @@ export class TimerView extends ItemView {
 		const item = wrapper.createDiv({ cls: 'mikumodoro-task-item' });
 		if (isSelected) item.classList.add('selected');
 
-		// Expand arrow
-		const arrow = item.createSpan({ cls: 'mikumodoro-task-arrow' });
-		arrow.setText('▸');
+		// Only parents need an expand arrow. This is recalculated from the
+		// refreshed task list on every render, including after adding a subtask.
+		const arrow = subtasks.length > 0
+			? item.createSpan({ cls: 'mikumodoro-task-arrow' })
+			: null;
 
 		// Task content
 		item.createSpan({
@@ -522,8 +524,15 @@ export class TimerView extends ItemView {
 			});
 		}
 
-		// Click to select
+		// The first click on a collapsed parent reveals its subtasks without
+		// changing the selected task. Clicking the expanded parent selects it.
 		item.addEventListener('click', () => {
+			if (subtasks.length > 0 && !this.expandedTasks.has(task.id)) {
+				this.expandedTasks.add(task.id);
+				this.render();
+				return;
+			}
+
 			this.plugin.setSelectedTask(task);
 			this.autoExpandParents(task, allTasks);
 			this.render();
@@ -558,7 +567,7 @@ export class TimerView extends ItemView {
 		// Subtask container (for rendering children)
 		const subtaskContainer = wrapper.createDiv({ cls: 'mikumodoro-subtask-container' });
 		const expanded = this.expandedTasks.has(task.id);
-		arrow.setText(expanded ? '▾' : '▸');
+		arrow?.setText(expanded ? '▾' : '▸');
 
 		// Re-render subtask container
 		const updateSubtaskDisplay = () => {
@@ -569,7 +578,7 @@ export class TimerView extends ItemView {
 			}
 		};
 
-		arrow.addEventListener('click', (e) => {
+		arrow?.addEventListener('click', (e) => {
 			e.stopPropagation();
 			if (this.expandedTasks.has(task.id)) {
 				this.expandedTasks.delete(task.id);
@@ -821,6 +830,7 @@ export class TimerView extends ItemView {
 			await this.plugin.todoistClient.createTask(content, parent.id, parent.project_id);
 			new Notice('Subtask created!');
 			await this.plugin.refreshTasks();
+			this.expandedTasks.add(parent.id);
 			this.render();
 		} catch (err) {
 			new Notice('Failed to create subtask');
