@@ -33,6 +33,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 			],
 			render: (setting) => {
 				setting.settingEl.empty();
+				setting.settingEl.addClass('mikumodoro-settings-root');
 				this.renderSettings(setting.settingEl);
 			},
 		}];

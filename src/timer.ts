@@ -65,7 +65,11 @@ export class TimerEngine {
 				if (this.state.mode === 'working') {
 					const workMs = this.settings.defaultWorkMinutes * 60000;
 					if (this.state.elapsedMs >= workMs) {
-						this.startBreak();
+						if (this.settings.autoStartBreak) {
+							this.startBreak();
+						} else {
+							this.waitForBreak();
+						}
 						return;
 					}
 				}
@@ -133,23 +137,7 @@ export class TimerEngine {
 		const isPausedWork = this.state.mode === 'paused' && this.pausedMode === 'working';
 		const workEndTime = isPausedWork ? (this.state.pausedAt ?? Date.now()) : Date.now();
 
-		// Record the completed work session
-		if (this.state.task && this.state.startTime) {
-			const durationMin = Math.max(1, Math.round((workEndTime - this.state.startTime) / 60000));
-			if (durationMin >= 1) {
-				const session: PomodoroSession = {
-					id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-					taskId: this.state.task.id,
-					taskContent: this.state.task.content,
-					startTime: this.state.startTime,
-					endTime: workEndTime,
-					durationMinutes: durationMin,
-					completed: true,
-				};
-				this.sessions.push(session);
-				this.onSessionComplete?.(session);
-			}
-		}
+		this.recordCompletedWork(workEndTime);
 
 		const workMs = this.state.startTime ? workEndTime - this.state.startTime : this.settings.defaultWorkMinutes * 60000;
 		let breakMs = workMs / this.settings.breakRatio;
@@ -175,6 +163,32 @@ export class TimerEngine {
 
 		const breakMin = Math.round(breakMs / 60000);
 		new Notice(`Break for ~${breakMin} minutes`);
+	}
+
+	private waitForBreak() {
+		this.stopInterval();
+		this.pausedMode = 'working';
+		this.state.pausedAt = Date.now();
+		this.state.mode = 'paused';
+		this.notify();
+		new Notice('Work session complete! Start your break when you are ready.');
+	}
+
+	private recordCompletedWork(endTime: number) {
+		if (!this.state.task || !this.state.startTime) return;
+
+		const durationMin = Math.max(1, Math.round((endTime - this.state.startTime) / 60000));
+		const session: PomodoroSession = {
+			id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+			taskId: this.state.task.id,
+			taskContent: this.state.task.content,
+			startTime: this.state.startTime,
+			endTime,
+			durationMinutes: durationMin,
+			completed: true,
+		};
+		this.sessions.push(session);
+		this.onSessionComplete?.(session);
 	}
 
 	extendBreak(multiplier: number) {
@@ -317,6 +331,15 @@ export class TimerEngine {
 
 	isBreakExtended(): boolean {
 		return this.breakExtended;
+	}
+
+	isPausedWork(): boolean {
+		return this.state.mode === 'paused' && this.pausedMode === 'working';
+	}
+
+	isWaitingForBreak(): boolean {
+		return this.isPausedWork()
+			&& this.state.elapsedMs >= this.settings.defaultWorkMinutes * 60000;
 	}
 
 	getBreakRemainingMs(): number {

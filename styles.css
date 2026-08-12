@@ -941,3 +941,39 @@ body.mikumodoro-is-resizing {
 	cursor: not-allowed;
 	pointer-events: none;
 }
+/* The settings search API supplies a horizontal setting-item as our root.
+   Stack the plugin's individual settings inside it and let controls wrap. */
+.mikumodoro-settings-root {
+	display: block;
+	min-width: 0;
+}
+
+.mikumodoro-settings-root > .setting-item {
+	flex-wrap: wrap;
+	gap: 12px;
+}
+
+.mikumodoro-settings-root > .setting-item > .setting-item-info,
+.mikumodoro-settings-root > .setting-item > .setting-item-control {
+	min-width: 0;
+}
+
+.mikumodoro-settings-root > .setting-item > .setting-item-control {
+	flex-wrap: wrap;
+}
+
+.mikumodoro-settings-root input[type='text'] {
+	max-width: 100%;
+}
+
+@media (max-width: 600px) {
+	.mikumodoro-settings-root > .setting-item {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.mikumodoro-settings-root > .setting-item > .setting-item-control {
+		justify-content: flex-start;
+		width: 100%;
+	}
+}

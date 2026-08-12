@@ -232,17 +232,20 @@ export class TimerView extends ItemView {
 				this.plugin.timerEngine.stop();
 			});
 		} else if (state.mode === 'paused') {
-			const resumeBtn = controls.createEl('button', {
-				cls: 'mikumodoro-btn mikumodoro-btn-primary',
-				text: 'Resume',
-			});
-			resumeBtn.addEventListener('click', () => {
-				this.plugin.timerEngine.resume();
-			});
+			const isWaitingForBreak = this.plugin.timerEngine.isWaitingForBreak();
+			if (!isWaitingForBreak) {
+				const resumeBtn = controls.createEl('button', {
+					cls: 'mikumodoro-btn mikumodoro-btn-primary',
+					text: 'Resume',
+				});
+				resumeBtn.addEventListener('click', () => {
+					this.plugin.timerEngine.resume();
+				});
+			}
 
 			const stopBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-stop',
-				text: 'Stop',
+				text: isWaitingForBreak ? 'Start break' : 'Stop',
 			});
 			stopBtn.addEventListener('click', () => {
 				this.plugin.timerEngine.stop();
@@ -524,9 +527,15 @@ export class TimerView extends ItemView {
 			});
 		}
 
-		// The first click on a collapsed parent reveals its subtasks without
-		// changing the selected task. Clicking the expanded parent selects it.
+		// Clicking the selected task clears it. Otherwise, the first click on a
+		// collapsed parent reveals its subtasks and the next click selects it.
 		item.addEventListener('click', () => {
+			if (isSelected) {
+				this.plugin.setSelectedTask(null);
+				this.render();
+				return;
+			}
+
 			if (subtasks.length > 0 && !this.expandedTasks.has(task.id)) {
 				this.expandedTasks.add(task.id);
 				this.render();
