@@ -130,16 +130,19 @@ export class TimerEngine {
 	}
 
 	startBreak() {
+		const isPausedWork = this.state.mode === 'paused' && this.pausedMode === 'working';
+		const workEndTime = isPausedWork ? (this.state.pausedAt ?? Date.now()) : Date.now();
+
 		// Record the completed work session
 		if (this.state.task && this.state.startTime) {
-			const durationMin = Math.max(1, Math.round((Date.now() - this.state.startTime) / 60000));
+			const durationMin = Math.max(1, Math.round((workEndTime - this.state.startTime) / 60000));
 			if (durationMin >= 1) {
 				const session: PomodoroSession = {
 					id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 					taskId: this.state.task.id,
 					taskContent: this.state.task.content,
 					startTime: this.state.startTime,
-					endTime: Date.now(),
+					endTime: workEndTime,
 					durationMinutes: durationMin,
 					completed: true,
 				};
@@ -148,7 +151,7 @@ export class TimerEngine {
 			}
 		}
 
-		const workMs = this.state.startTime ? Date.now() - this.state.startTime : this.settings.defaultWorkMinutes * 60000;
+		const workMs = this.state.startTime ? workEndTime - this.state.startTime : this.settings.defaultWorkMinutes * 60000;
 		let breakMs = workMs / this.settings.breakRatio;
 		breakMs += this.accumulatedBreakMs;
 		this.accumulatedBreakMs = 0;
@@ -208,6 +211,12 @@ export class TimerEngine {
 	}
 
 	stop() {
+		// Stopping paused work completes the work period and starts its break.
+		if (this.state.mode === 'paused' && this.pausedMode === 'working') {
+			this.startBreak();
+			return;
+		}
+
 		this.stopInterval();
 
 		// If stopping during work or paused work, record partial session

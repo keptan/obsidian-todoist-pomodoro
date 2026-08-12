@@ -132,6 +132,22 @@ assert(
 	engine.getSessions().length === sessionsBeforeWorkFromPausedBreak,
 	'Starting work from a paused break should not record a work session',
 );
+
+// Test 14: Stopping paused work completes it and starts the break
+engine.stop();
+engine.startWork(mockTask);
+engine.pause();
+const sessionsBeforePausedWorkStop = engine.getSessions().length;
+engine.stop();
+assert(engine.getState().mode === 'break', 'Stopping paused work should start a break');
+assert(
+	engine.getSessions().length === sessionsBeforePausedWorkStop + 1,
+	'Stopping paused work should record the completed work session',
+);
+assert(
+	engine.getSessions().at(-1)?.completed === true,
+	'Stopping paused work should mark the session completed',
+);
 engine.destroy();
 newEngine.destroy();
 
