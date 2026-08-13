@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-todoist-pomodoro",
-	"version": "0.3.9",
+	"version": "0.3.10",
 	"description": "Mikumodoro timer with Todoist integration and pomodoro heatmap for Obsidian",
 	"main": "main.js",
 	"type": "module",
