@@ -744,6 +744,42 @@ body.mikumodoro-is-resizing {
 	color: var(--text-muted);
 }
 
+.mikumodoro-heatmap-container.is-drag-selecting {
+	user-select: none;
+}
+
+.mikumodoro-heatmap-cell.is-drag-selected,
+.mikumodoro-heatmap-month-cell.is-drag-selected {
+	background: color-mix(in srgb, var(--interactive-accent) 28%, transparent) !important;
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 45%, transparent);
+	outline: none;
+	filter: none;
+}
+
+.mikumodoro-heatmap-selection-box {
+	position: fixed;
+	z-index: 10001;
+	box-sizing: border-box;
+	border: 1px solid var(--interactive-accent);
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	pointer-events: none;
+}
+
+.mikumodoro-heatmap-selection-stats {
+	position: absolute;
+	top: 3px;
+	right: 3px;
+	padding: 2px 5px;
+	border-radius: 4px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 0.7em;
+	font-weight: 600;
+	line-height: 1.3;
+	white-space: nowrap;
+	box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+
 
 
 /* Legend */
@@ -890,6 +926,19 @@ body.mikumodoro-is-resizing {
 }
 
 /* Manual time logger */
+.mikumodoro-log-current-time {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 16px;
+	font-size: 0.9em;
+	cursor: pointer;
+}
+
+.mikumodoro-log-current-time input {
+	accent-color: var(--interactive-accent);
+}
+
 .mikumodoro-log-duration-area {
 	margin-bottom: 16px;
 }
@@ -925,6 +974,10 @@ body.mikumodoro-is-resizing {
 
 .mikumodoro-log-date-area {
 	margin-bottom: 16px;
+}
+
+.mikumodoro-log-date-area.is-hidden {
+	display: none;
 }
 
 .mikumodoro-log-date-input {

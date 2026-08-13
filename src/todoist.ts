@@ -20,7 +20,7 @@ export class TodoistClient {
 		this.token = token;
 	}
 
-	private async request(path: string, method = 'GET', body?: unknown): Promise<unknown> {
+	private async request(path: string, method = 'GET', body?: unknown, expectsJson = true): Promise<unknown> {
 		const headers: Record<string, string> = {
 			'Authorization': `Bearer ${this.token}`,
 		};
@@ -33,7 +33,7 @@ export class TodoistClient {
 			headers,
 			body: body ? JSON.stringify(body) : undefined,
 		});
-		return response.json;
+		return expectsJson ? response.json : undefined;
 	}
 
 	async getTasks(): Promise<TodoistTask[]> {
@@ -56,7 +56,7 @@ export class TodoistClient {
 	}
 
 	async closeTask(id: string): Promise<void> {
-		await this.request(`/tasks/${id}/close`, 'POST');
+		await this.request(`/tasks/${id}/close`, 'POST', undefined, false);
 	}
 
 	async createTask(content: string, parentId?: string, projectId?: string): Promise<TodoistTask> {

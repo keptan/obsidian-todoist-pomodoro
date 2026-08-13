@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, Notice, Modal, setIcon } from 'obsidian';
 import type MikumodoroTimerPlugin from './main';
 import type { TodoistTask, TimerState } from './types';
-import { formatTimerDisplay, formatLocalDate } from './utils';
+import { formatTimerDisplay, formatLocalDate, formatMinutes } from './utils';
 
 export const TIMER_VIEW_TYPE = 'obsidian-todoist-pomodoro-view';
 
@@ -1099,7 +1099,12 @@ export class TimerView extends ItemView {
 			valueDisplay.setText(h > 0 ? `${h}h ${m}m` : `${m}m`);
 		});
 
-		const dateArea = modal.contentEl.createDiv({ cls: 'mikumodoro-log-date-area' });
+		const currentTimeArea = modal.contentEl.createEl('label', { cls: 'mikumodoro-log-current-time' });
+		const currentTimeInput = currentTimeArea.createEl('input', { type: 'checkbox' });
+		currentTimeInput.checked = true;
+		currentTimeArea.createSpan({ text: 'Log at current time' });
+
+		const dateArea = modal.contentEl.createDiv({ cls: 'mikumodoro-log-date-area is-hidden' });
 		dateArea.createEl('label', { text: 'Date', cls: 'mikumodoro-log-label' });
 		const dateInput = dateArea.createEl('input', {
 			type: 'date',
@@ -1107,6 +1112,9 @@ export class TimerView extends ItemView {
 		});
 		const todayStr = formatLocalDate(new Date());
 		dateInput.value = todayStr;
+		currentTimeInput.addEventListener('change', () => {
+			dateArea.classList.toggle('is-hidden', currentTimeInput.checked);
+		});
 
 		const addBtn = modal.contentEl.createEl('button', {
 			cls: 'mikumodoro-btn mikumodoro-btn-primary',
@@ -1117,7 +1125,7 @@ export class TimerView extends ItemView {
 			if (!label) return;
 			const minutes = parseInt(slider.value);
 			const dateStr = dateInput.value || todayStr;
-			const sessionDate = new Date(dateStr + 'T12:00:00');
+			const sessionDate = currentTimeInput.checked ? new Date() : new Date(dateStr + 'T12:00:00');
 			await this.plugin.addManualSession(label, minutes, sessionDate);
 			new Notice(`Logged ${minutes}m for "${label}"`);
 			modal.close();
@@ -1207,7 +1215,7 @@ export class TimerView extends ItemView {
 		const totalMin = todaySessions.reduce((a, s) => a + s.durationMinutes, 0);
 		list.createDiv({
 			cls: 'mikumodoro-session-total',
-			text: `${todaySessions.length} sessions · ${(totalMin / 60).toFixed(1)}h`,
+			text: `${todaySessions.length} sessions · ${formatMinutes(totalMin)}`,
 		});
 
 		for (const s of todaySessions.reverse()) {

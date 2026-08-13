@@ -1,6 +1,6 @@
 import type { PomodoroSession, MikumodoroSettings } from './types';
 import type MikumodoroTimerPlugin from './main';
-import { formatLocalDate } from './utils';
+import { formatLocalDate, formatMinutes } from './utils';
 
 interface TaskMinutesEntry {
 	taskContent: string;
@@ -132,6 +132,7 @@ export function renderHeatmap(
 
 	render();
 	attachTooltips(container);
+	attachDragSelection(container);
 }
 
 function renderYearView(
@@ -151,9 +152,8 @@ function renderYearView(
 	const maxMinutes = getMax(yearStart, yearEnd);
 
 	const totalMinutes = sumMinutesInRange(dayMap, yearStart, yearEnd);
-	const totalHours = (totalMinutes / 60).toFixed(1);
 	const statsEl = container.createDiv({ cls: 'mikumodoro-heatmap-stats' });
-	statsEl.setText(`${totalHours}h in ${year}`);
+	statsEl.setText(`${formatMinutes(totalMinutes)} in ${year}`);
 
 	const monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -206,6 +206,10 @@ function renderYearView(
 			const hasDue = dueDateSet.has(dateStr);
 
 			const cell = weekCol.createDiv({ cls: 'mikumodoro-heatmap-cell' });
+			if (isInYear) {
+				cell.dataset.selectionDay = dateStr;
+				cell.dataset.selectionMinutes = String(minutes);
+			}
 
 			if (!isInYear) {
 				cell.classList.add('out-of-range');
@@ -261,10 +265,9 @@ function renderMonthView(
 	const maxMinutes = getMax(monthStart, monthEnd);
 
 	const totalMinutes = sumMinutesInRange(dayMap, monthStart, monthEnd);
-	const totalHours = (totalMinutes / 60).toFixed(1);
 	const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 	const statsEl = container.createDiv({ cls: 'mikumodoro-heatmap-stats' });
-	statsEl.setText(`${totalHours}h in ${monthNames[month]} ${year}`);
+	statsEl.setText(`${formatMinutes(totalMinutes)} in ${monthNames[month]} ${year}`);
 
 	const dayLabels = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 	const headerRow = container.createDiv({ cls: 'mikumodoro-heatmap-month-header' });
@@ -288,6 +291,8 @@ function renderMonthView(
 		const hasDue = dueDateSet.has(dateStr);
 
 		const cell = calGrid.createDiv({ cls: 'mikumodoro-heatmap-month-cell' });
+		cell.dataset.selectionDay = dateStr;
+		cell.dataset.selectionMinutes = String(minutes);
 		cell.createSpan({ cls: 'mikumodoro-heatmap-month-day-num', text: String(day) });
 
 		if (isFuture) {
@@ -316,7 +321,7 @@ function renderMonthView(
 	renderLegend(container, settings);
 }
 
-function buildTooltip(
+export function buildTooltip(
 	dateStr: string,
 	date: Date,
 	minutes: number,
@@ -338,7 +343,7 @@ function buildTooltip(
 				lines.push(`  ${name}: ${formatMinutes(t.minutes)}`);
 			}
 			if (sorted.length > 5) {
-				lines.push(`  +${sorted.length - 5} more`);
+				lines.push(`  and ${sorted.length - 5} more`);
 			}
 		}
 	} else {
@@ -399,6 +404,80 @@ function attachTooltips(container: HTMLElement) {
 	});
 }
 
+export function summarizeSelectedDays(minutesByDay: number[]): { totalMinutes: number; averageMinutes: number } {
+	const totalMinutes = minutesByDay.reduce((total, minutes) => total + minutes, 0);
+	return {
+		totalMinutes,
+		averageMinutes: minutesByDay.length > 0 ? Math.round(totalMinutes / minutesByDay.length) : 0,
+	};
+}
+
+function attachDragSelection(container: HTMLElement) {
+	if (container.dataset.dragSelectionAttached) return;
+	container.dataset.dragSelectionAttached = '1';
+
+	container.addEventListener('pointerdown', (event) => {
+		if (event.button !== 0) return;
+		const target = (event.target as HTMLElement).closest<HTMLElement>('[data-selection-day]');
+		if (!target || !container.contains(target)) return;
+
+		event.preventDefault();
+		const startX = event.clientX;
+		const startY = event.clientY;
+		const selectionBox = document.body.createDiv({ cls: 'mikumodoro-heatmap-selection-box' });
+		const statsEl = selectionBox.createDiv({ cls: 'mikumodoro-heatmap-selection-stats' });
+		const selectedCells = new Set<HTMLElement>();
+		document.body.querySelector<HTMLElement>('.mikumodoro-heatmap-tooltip')?.classList.remove('is-visible');
+		container.classList.add('is-drag-selecting');
+
+		const update = (clientX: number, clientY: number) => {
+			const left = Math.min(startX, clientX);
+			const top = Math.min(startY, clientY);
+			const right = Math.max(startX, clientX);
+			const bottom = Math.max(startY, clientY);
+			selectionBox.style.left = `${left}px`;
+			selectionBox.style.top = `${top}px`;
+			selectionBox.style.width = `${right - left}px`;
+			selectionBox.style.height = `${bottom - top}px`;
+
+			selectedCells.clear();
+			const selectedMinutes: number[] = [];
+			for (const cell of Array.from(container.querySelectorAll<HTMLElement>('[data-selection-day]'))) {
+				const rect = cell.getBoundingClientRect();
+				const intersects = rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
+				cell.classList.toggle('is-drag-selected', intersects);
+				if (intersects) {
+					selectedCells.add(cell);
+					selectedMinutes.push(Number(cell.dataset.selectionMinutes) || 0);
+				}
+			}
+
+			const summary = summarizeSelectedDays(selectedMinutes);
+			statsEl.setText(`${formatMinutes(summary.totalMinutes)} total · ${formatMinutes(summary.averageMinutes)}/day`);
+		};
+
+		const finish = () => {
+			for (const cell of selectedCells) cell.classList.remove('is-drag-selected');
+			container.classList.remove('is-drag-selecting');
+			selectionBox.remove();
+			window.removeEventListener('pointermove', onMove);
+			window.removeEventListener('pointerup', finish);
+			window.removeEventListener('pointercancel', finish);
+			window.removeEventListener('blur', finish);
+		};
+		const onMove = (moveEvent: PointerEvent) => {
+			moveEvent.preventDefault();
+			update(moveEvent.clientX, moveEvent.clientY);
+		};
+
+		window.addEventListener('pointermove', onMove, { passive: false });
+		window.addEventListener('pointerup', finish);
+		window.addEventListener('pointercancel', finish);
+		window.addEventListener('blur', finish);
+		update(startX, startY);
+	});
+}
+
 function renderLegend(container: HTMLElement, settings: MikumodoroSettings) {
 	const legend = container.createDiv({ cls: 'mikumodoro-heatmap-legend' });
 	legend.createSpan({ cls: 'mikumodoro-heatmap-legend-label', text: 'Less' });
@@ -423,14 +502,6 @@ function sumMinutesInRange(dayMap: Map<string, number>, start: Date, end: Date):
 		d.setDate(d.getDate() + 1);
 	}
 	return total;
-}
-
-function formatMinutes(minutes: number): string {
-	const h = Math.floor(minutes / 60);
-	const m = minutes % 60;
-	if (h > 0 && m > 0) return `${h}h ${m}m`;
-	if (h > 0) return `${h}h`;
-	return `${m}m`;
 }
 
 function interpolateColor(hex: string, intensity: number): string {

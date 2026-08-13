@@ -12,6 +12,14 @@ export function formatTimerDisplay(ms: number): string {
 	return parts.join(':');
 }
 
+export function formatMinutes(minutes: number): string {
+	const hours = Math.floor(minutes / 60);
+	const remainingMinutes = minutes % 60;
+	if (hours > 0 && remainingMinutes > 0) return `${hours}h ${remainingMinutes}m`;
+	if (hours > 0) return `${hours}h`;
+	return `${remainingMinutes}m`;
+}
+
 export function formatDate(timestamp: number): string {
 	return new Date(timestamp).toLocaleDateString([], {
 		year: 'numeric',
