@@ -19,6 +19,16 @@ export function renderHeatmap(
 	let viewMode: 'year' | 'month' = settings.heatmapViewMode ?? 'year';
 	let currentYear = new Date().getFullYear();
 	let currentMonth = new Date().getMonth();
+	const requestedHistoryRanges = new Set<string>();
+
+	function requestHistory(key: string, request: () => Promise<boolean>) {
+		if (requestedHistoryRanges.has(key)) return;
+		requestedHistoryRanges.add(key);
+		void request().then(() => render()).catch(err => {
+			requestedHistoryRanges.delete(key);
+			console.error('Mikumodoro: Failed to load completion history', err);
+		});
+	}
 
 	// Build date -> total minutes and date -> per-task breakdown
 	const dayMap = new Map<string, number>();
@@ -103,9 +113,7 @@ export function renderHeatmap(
 		else if (slideDirection === 'right') contentArea.classList.add('slide-right');
 
 		if (viewMode === 'year') {
-			void plugin?.ensureCompletionHistoryForYear(currentYear).then(fetched => {
-				if (fetched) render();
-			}).catch(err => console.error('Mikumodoro: Failed to load year completion history', err));
+			if (plugin) requestHistory(`year:${currentYear}`, () => plugin.ensureCompletionHistoryForYear(currentYear));
 			labelEl.setText(String(currentYear));
 			prevBtn.addEventListener('click', () => { currentYear--; slideDirection = 'right'; render(); });
 			nextBtn.addEventListener('click', () => {
@@ -114,9 +122,7 @@ export function renderHeatmap(
 			if (currentYear >= today.getFullYear()) nextBtn.classList.add('disabled');
 			renderYearView(contentArea, currentYear, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange);
 		} else {
-			void plugin?.ensureCompletionHistoryForMonth(currentYear, currentMonth).then(fetched => {
-				if (fetched) render();
-			}).catch(err => console.error('Mikumodoro: Failed to load month completion history', err));
+			if (plugin) requestHistory(`month:${currentYear}:${currentMonth}`, () => plugin.ensureCompletionHistoryForMonth(currentYear, currentMonth));
 			const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 			labelEl.setText(`${monthNames[currentMonth]} ${currentYear}`);
 			prevBtn.addEventListener('click', () => {

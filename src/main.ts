@@ -502,7 +502,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		if (!this.settings.todoistApiToken) return false;
 		const key = `${formatLocalDate(start)}:${formatLocalDate(end)}`;
 		const existing = this.completionHistoryLoads.get(key);
-		if (existing) return existing;
+		if (existing) {
+			await existing;
+			return false;
+		}
 
 		const load = this.syncCompletedHistoryRange(start, end).then(() => true);
 		this.completionHistoryLoads.set(key, load);
