@@ -83,18 +83,17 @@ export class TodoistClient {
 		return map;
 	}
 
-	/**
-	 * Fetch completed tasks using the sync API.
-	 * Returns items with completed_at timestamps.
-	 * Note: requires project_id filter on some accounts.
-	 */
-	async getCompletedTasks(since?: Date): Promise<Array<{ task_id: string; content: string; completed_at: string; project_id: string }>> {
+	/** Fetch completed tasks within Todoist's maximum three-month date window. */
+	async getCompletedTasks(since: Date, until: Date): Promise<Array<{ task_id: string; content: string; completed_at: string; project_id: string }>> {
 		if (!this.token) return [];
-		const rangeStart = since ?? new Date(Date.now() - 89 * 24 * 60 * 60 * 1000);
 		const completed: Array<{ task_id: string; content: string; completed_at: string; project_id: string }> = [];
 		let cursor: string | null = null;
 		do {
-			const params = new URLSearchParams({ since: rangeStart.toISOString(), limit: '50' });
+			const params = new URLSearchParams({
+				since: since.toISOString(),
+				until: until.toISOString(),
+				limit: '50',
+			});
 			if (cursor) params.set('cursor', cursor);
 			const response = await requestUrl({
 				url: `${API_BASE}/tasks/completed/by_completion_date?${params.toString()}`,

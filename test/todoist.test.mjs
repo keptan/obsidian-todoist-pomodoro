@@ -36,8 +36,12 @@ globalThis.__obsidianRequestUrl = async request => {
 	return { status: 200, text: '', json: responses.shift() };
 };
 
-const completed = await client.getCompletedTasks(new Date('2026-08-01T00:00:00Z'));
+const completed = await client.getCompletedTasks(
+	new Date('2026-08-01T00:00:00Z'),
+	new Date('2026-09-01T00:00:00Z'),
+);
 assert.deepEqual(completed.map(task => task.task_id), ['root-task', 'subtask']);
 assert.match(historyRequests[0].url, /tasks\/completed\/by_completion_date\?/);
 assert.match(historyRequests[0].url, /since=2026-08-01T00%3A00%3A00.000Z/);
+assert.match(historyRequests[0].url, /until=2026-09-01T00%3A00%3A00.000Z/);
 assert.match(historyRequests[1].url, /cursor=next-page/);

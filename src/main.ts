@@ -26,6 +26,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private selectedTask: TodoistTask | null = null;
 	private taskNoteMap: TaskNoteMap = {};
 	private completionMap: CompletionMap = {};
+	private completionHistoryLoads = new Map<string, Promise<boolean>>();
 	private customActivityLabels: string[] = [];
 	private heatmapElements: Set<HTMLElement> = new Set();
 	private saveTimer: number | null = null;
@@ -215,19 +216,11 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			void this.reloadFromDisk();
 		}, 60000));
 
-		// Auto-fetch completed history on boot if we don't have it yet
+		// Populate the entire default calendar year. Older years load on navigation.
 		if (this.settings.todoistApiToken) {
-			const hasHistory = Object.keys(this.completionMap).length > 0;
-			if (!hasHistory) {
-				void this.syncCompletedHistory().catch(err => {
-					console.error('Mikumodoro: Auto history fetch failed', err);
-				});
-			} else {
-				// Still sync on boot for safekeeping (merge new completions)
-				void this.syncCompletedHistory().catch(err => {
-					console.error('Mikumodoro: Boot history sync failed', err);
-				});
-			}
+			void this.ensureCompletionHistoryForYear(new Date().getFullYear()).catch(err => {
+				console.error('Mikumodoro: Boot history sync failed', err);
+			});
 		}
 
 		// Request notification permission if enabled
@@ -491,12 +484,45 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 	}
 
-	// Sync historical completed tasks from Todoist
-	async syncCompletedHistory() {
-		if (!this.settings.todoistApiToken) return;
+	async ensureCompletionHistoryForYear(year: number): Promise<boolean> {
+		return this.ensureCompletionHistoryRange(new Date(year, 0, 1), new Date(year + 1, 0, 1));
+	}
+
+	async ensureCompletionHistoryForMonth(year: number, month: number): Promise<boolean> {
+		const yearKey = `${formatLocalDate(new Date(year, 0, 1))}:${formatLocalDate(new Date(year + 1, 0, 1))}`;
+		const yearLoad = this.completionHistoryLoads.get(yearKey);
+		if (yearLoad) {
+			await yearLoad;
+			return false;
+		}
+		return this.ensureCompletionHistoryRange(new Date(year, month, 1), new Date(year, month + 1, 1));
+	}
+
+	private async ensureCompletionHistoryRange(start: Date, end: Date): Promise<boolean> {
+		if (!this.settings.todoistApiToken) return false;
+		const key = `${formatLocalDate(start)}:${formatLocalDate(end)}`;
+		const existing = this.completionHistoryLoads.get(key);
+		if (existing) return existing;
+
+		const load = this.syncCompletedHistoryRange(start, end).then(() => true);
+		this.completionHistoryLoads.set(key, load);
 		try {
-			// Pull completed tasks from the sync API
-			const completed = await this.todoistClient.getCompletedTasks();
+			return await load;
+		} catch (err) {
+			this.completionHistoryLoads.delete(key);
+			throw err;
+		}
+	}
+
+	private async syncCompletedHistoryRange(start: Date, end: Date) {
+		try {
+			const completed = [];
+			let chunkStart = new Date(start);
+			while (chunkStart < end) {
+				const chunkEnd = new Date(Math.min(end.getTime(), chunkStart.getTime() + 89 * 24 * 60 * 60 * 1000));
+				completed.push(...await this.todoistClient.getCompletedTasks(chunkStart, chunkEnd));
+				chunkStart = chunkEnd;
+			}
 			for (const item of completed) {
 				const dateStr = formatLocalDate(new Date(item.completed_at));
 				if (!this.completionMap[dateStr]) {
@@ -515,8 +541,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				}
 			}
 			await this.savePluginData();
-			this.lastDataSignature = ''; // force heatmap refresh
-			this.refreshHeatmaps();
 		} catch (err) {
 			console.error('Mikumodoro: Failed to sync completed history', err);
 			throw err;

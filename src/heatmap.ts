@@ -103,6 +103,9 @@ export function renderHeatmap(
 		else if (slideDirection === 'right') contentArea.classList.add('slide-right');
 
 		if (viewMode === 'year') {
+			void plugin?.ensureCompletionHistoryForYear(currentYear).then(fetched => {
+				if (fetched) render();
+			}).catch(err => console.error('Mikumodoro: Failed to load year completion history', err));
 			labelEl.setText(String(currentYear));
 			prevBtn.addEventListener('click', () => { currentYear--; slideDirection = 'right'; render(); });
 			nextBtn.addEventListener('click', () => {
@@ -111,6 +114,9 @@ export function renderHeatmap(
 			if (currentYear >= today.getFullYear()) nextBtn.classList.add('disabled');
 			renderYearView(contentArea, currentYear, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange);
 		} else {
+			void plugin?.ensureCompletionHistoryForMonth(currentYear, currentMonth).then(fetched => {
+				if (fetched) render();
+			}).catch(err => console.error('Mikumodoro: Failed to load month completion history', err));
 			const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 			labelEl.setText(`${monthNames[currentMonth]} ${currentYear}`);
 			prevBtn.addEventListener('click', () => {
