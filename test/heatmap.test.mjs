@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { buildTooltip, summarizeSelectedDays } from '../src/heatmap.ts';
+import { buildTooltip, formatSelectionSummary, summarizeSelectedDays } from '../src/heatmap.ts';
 
 const taskEntries = [
 	{ taskContent: 'smallest', minutes: 5 },
@@ -27,9 +27,31 @@ assert.match(lines[5], /fifth: 14m$/);
 assert.equal(lines[6], '  and 1 more');
 assert.doesNotMatch(tooltip, /smallest: 5m/);
 
-assert.deepEqual(
-	summarizeSelectedDays([54, 30, 0, 25]),
-	{ totalMinutes: 109, averageMinutes: 27 },
-	'selection total should include every day and average across selected calendar days',
+const completionTooltip = buildTooltip(
+	'2026-08-12',
+	new Date(2026, 7, 12),
+	0,
+	3,
+	false,
+	[],
+	new Map(),
 );
-assert.deepEqual(summarizeSelectedDays([]), { totalMinutes: 0, averageMinutes: 0 });
+assert.match(completionTooltip, /3 Todoist tasks completed/);
+
+const selection = summarizeSelectedDays([
+	{ minutes: 54, completions: 2, tasks: [{ taskContent: 'Writing', minutes: 54 }] },
+	{ minutes: 30, completions: 1, tasks: [{ taskContent: 'Math', minutes: 30 }] },
+	{ minutes: 0, completions: 0, tasks: [] },
+	{ minutes: 25, completions: 3, tasks: [{ taskContent: 'Writing', minutes: 25 }] },
+]);
+assert.equal(selection.totalMinutes, 109);
+assert.equal(selection.averageMinutes, 27);
+assert.equal(selection.completions, 6);
+assert.deepEqual(selection.tasks, [
+	{ taskContent: 'Writing', minutes: 79 },
+	{ taskContent: 'Math', minutes: 30 },
+]);
+assert.equal(
+	formatSelectionSummary(selection),
+	'1h 49m total · 27m/day\nWriting: 1h 19m\nMath: 30m\n6 Todoist tasks completed',
+);

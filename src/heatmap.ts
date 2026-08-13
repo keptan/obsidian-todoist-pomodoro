@@ -7,6 +7,13 @@ interface TaskMinutesEntry {
 	minutes: number;
 }
 
+interface SelectionSummary {
+	totalMinutes: number;
+	averageMinutes: number;
+	completions: number;
+	tasks: TaskMinutesEntry[];
+}
+
 export function renderHeatmap(
 	container: HTMLElement,
 	sessions: PomodoroSession[],
@@ -221,6 +228,8 @@ function renderYearView(
 			if (isInYear) {
 				cell.dataset.selectionDay = dateStr;
 				cell.dataset.selectionMinutes = String(minutes);
+				cell.dataset.selectionCompletions = String(completions);
+				cell.dataset.selectionTasks = JSON.stringify(dayTaskMap.get(dateStr) ?? []);
 			}
 
 			if (!isInYear) {
@@ -236,10 +245,6 @@ function renderYearView(
 
 			if (isInYear) {
 				if (hasDue) cell.classList.add('has-due');
-			}
-
-			if (isInYear && !isFuture && completions > 0) {
-				cell.createSpan({ cls: 'mikumodoro-completion-badge', text: String(completions) });
 			}
 
 			if (isInYear) {
@@ -305,6 +310,8 @@ function renderMonthView(
 		const cell = calGrid.createDiv({ cls: 'mikumodoro-heatmap-month-cell' });
 		cell.dataset.selectionDay = dateStr;
 		cell.dataset.selectionMinutes = String(minutes);
+		cell.dataset.selectionCompletions = String(completions);
+		cell.dataset.selectionTasks = JSON.stringify(dayTaskMap.get(dateStr) ?? []);
 		cell.createSpan({ cls: 'mikumodoro-heatmap-month-day-num', text: String(day) });
 
 		if (isFuture) {
@@ -317,10 +324,6 @@ function renderMonthView(
 		}
 
 		if (hasDue) cell.classList.add('has-due');
-
-		if (!isFuture && completions > 0) {
-			cell.createSpan({ cls: 'mikumodoro-completion-badge', text: String(completions) });
-		}
 
 		const dueTasks = dueDateTasks.get(dateStr) ?? [];
 		const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap);
@@ -362,7 +365,7 @@ export function buildTooltip(
 		lines.push(dateLabel);
 	}
 	const extras: string[] = [];
-	if (completions > 0) extras.push(`${completions} completed`);
+	if (completions > 0) extras.push(`${completions} Todoist ${completions === 1 ? 'task' : 'tasks'} completed`);
 	if (hasDue && dueTasks.length > 0) {
 		const shownDue = dueTasks.slice(0, 4).map(t => t.length > 30 ? t.slice(0, 30) + '...' : t);
 		extras.push('due: ' + shownDue.join(', '));
@@ -416,12 +419,36 @@ function attachTooltips(container: HTMLElement) {
 	});
 }
 
-export function summarizeSelectedDays(minutesByDay: number[]): { totalMinutes: number; averageMinutes: number } {
-	const totalMinutes = minutesByDay.reduce((total, minutes) => total + minutes, 0);
+export function summarizeSelectedDays(
+	days: Array<{ minutes: number; completions: number; tasks: TaskMinutesEntry[] }>,
+): SelectionSummary {
+	const totalMinutes = days.reduce((total, day) => total + day.minutes, 0);
+	const taskTotals = new Map<string, number>();
+	for (const day of days) {
+		for (const task of day.tasks) {
+			taskTotals.set(task.taskContent, (taskTotals.get(task.taskContent) ?? 0) + task.minutes);
+		}
+	}
 	return {
 		totalMinutes,
-		averageMinutes: minutesByDay.length > 0 ? Math.round(totalMinutes / minutesByDay.length) : 0,
+		averageMinutes: days.length > 0 ? Math.round(totalMinutes / days.length) : 0,
+		completions: days.reduce((total, day) => total + day.completions, 0),
+		tasks: Array.from(taskTotals, ([taskContent, minutes]) => ({ taskContent, minutes }))
+			.sort((a, b) => b.minutes - a.minutes),
 	};
+}
+
+export function formatSelectionSummary(summary: SelectionSummary): string {
+	const lines = [
+		`${formatMinutes(summary.totalMinutes)} total · ${formatMinutes(summary.averageMinutes)}/day`,
+	];
+	for (const task of summary.tasks.slice(0, 5)) {
+		const name = task.taskContent.length > 30 ? task.taskContent.slice(0, 30) + '...' : task.taskContent;
+		lines.push(`${name}: ${formatMinutes(task.minutes)}`);
+	}
+	if (summary.tasks.length > 5) lines.push(`and ${summary.tasks.length - 5} more`);
+	lines.push(`${summary.completions} Todoist ${summary.completions === 1 ? 'task' : 'tasks'} completed`);
+	return lines.join('\n');
 }
 
 function attachDragSelection(container: HTMLElement) {
@@ -453,19 +480,28 @@ function attachDragSelection(container: HTMLElement) {
 			selectionBox.style.height = `${bottom - top}px`;
 
 			selectedCells.clear();
-			const selectedMinutes: number[] = [];
+			const selectedDays: Array<{ minutes: number; completions: number; tasks: TaskMinutesEntry[] }> = [];
 			for (const cell of Array.from(container.querySelectorAll<HTMLElement>('[data-selection-day]'))) {
 				const rect = cell.getBoundingClientRect();
 				const intersects = rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
 				cell.classList.toggle('is-drag-selected', intersects);
 				if (intersects) {
 					selectedCells.add(cell);
-					selectedMinutes.push(Number(cell.dataset.selectionMinutes) || 0);
+					let tasks: TaskMinutesEntry[] = [];
+					try {
+						tasks = JSON.parse(cell.dataset.selectionTasks ?? '[]') as TaskMinutesEntry[];
+					} catch {
+						// A malformed data attribute should not break drag selection.
+					}
+					selectedDays.push({
+						minutes: Number(cell.dataset.selectionMinutes) || 0,
+						completions: Number(cell.dataset.selectionCompletions) || 0,
+						tasks,
+					});
 				}
 			}
 
-			const summary = summarizeSelectedDays(selectedMinutes);
-			statsEl.setText(`${formatMinutes(summary.totalMinutes)} total · ${formatMinutes(summary.averageMinutes)}/day`);
+			statsEl.setText(formatSelectionSummary(summarizeSelectedDays(selectedDays)));
 		};
 
 		const finish = () => {
