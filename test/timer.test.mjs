@@ -149,33 +149,20 @@ assert(
 	'Stopping paused work should mark the session completed',
 );
 
-// Test 15: Work limit respects the auto-start break setting
-const manualBreakEngine = new TimerEngine({ ...settings, autoStartBreak: false });
-manualBreakEngine.startWork(mockTask);
-manualBreakEngine.state.startTime = Date.now() - settings.defaultWorkMinutes * 60000;
-manualBreakEngine.tick();
-assert(
-	manualBreakEngine.getState().mode === 'paused',
-	'Disabled auto-start should wait for the user before starting a break',
-);
-assert(
-	manualBreakEngine.isPausedWork(),
-	'Disabled auto-start should preserve the completed work context',
-);
-assert(manualBreakEngine.isWaitingForBreak(), 'Completed work should expose the waiting-break state');
-manualBreakEngine.stop();
-assert(manualBreakEngine.getState().mode === 'break', 'User can start the waiting break');
-assert(manualBreakEngine.getSessions().at(-1)?.completed === true, 'Waiting work is recorded completed');
-
-const autoBreakEngine = new TimerEngine({ ...settings, autoStartBreak: true });
-autoBreakEngine.startWork(mockTask);
-autoBreakEngine.state.startTime = Date.now() - settings.defaultWorkMinutes * 60000;
-autoBreakEngine.tick();
-assert(autoBreakEngine.getState().mode === 'break', 'Enabled auto-start should enter a break');
+// Test 15: Reaching the work target reminds once and keeps counting.
+const continuousEngine = new TimerEngine(settings);
+let workLimitNotifications = 0;
+continuousEngine.setOnWorkLimitReached(() => workLimitNotifications++);
+continuousEngine.startWork(mockTask);
+continuousEngine.state.startTime = Date.now() - settings.defaultWorkMinutes * 60000;
+continuousEngine.tick();
+assert(continuousEngine.getState().mode === 'working', 'Work target should not stop or pause the timer');
+assert(workLimitNotifications === 1, 'Work target should notify once');
+continuousEngine.tick();
+assert(workLimitNotifications === 1, 'Work target should not notify repeatedly');
 engine.destroy();
 newEngine.destroy();
-manualBreakEngine.destroy();
-autoBreakEngine.destroy();
+continuousEngine.destroy();
 
 console.log('---');
 console.log(`Results: ${passed} passed, ${failed} failed`);

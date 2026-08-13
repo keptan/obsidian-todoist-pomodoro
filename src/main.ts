@@ -97,6 +97,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			this.refreshHeatmaps();
 		});
 
+		this.timerEngine.setOnWorkLimitReached(() => {
+			this.onWorkLimitReached();
+		});
+
 		// Break start callback: play chime + notification
 		this.timerEngine.setOnBreakStart(() => {
 			this.onBreakStart();
@@ -643,6 +647,18 @@ export default class MikumodoroTimerPlugin extends Plugin {
 					icon: '🍅',
 				});
 			}
+		}
+	}
+
+	private onWorkLimitReached() {
+		if (this.settings.soundEnabled) {
+			this.playChime();
+		}
+		if (this.settings.notificationsEnabled && 'Notification' in window && Notification.permission === 'granted') {
+			new Notification('Todoist Pomodoro Heatmap', {
+				body: 'Work target reached! Keep going or take a break when ready. (≧▽≦)',
+				icon: '🍅',
+			});
 		}
 	}
 

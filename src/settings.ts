@@ -124,18 +124,6 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('Auto-start break')
-			.setDesc('Automatically start the break timer when a work session ends.')
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.autoStartBreak)
-					.onChange(async (value) => {
-						this.plugin.settings.autoStartBreak = value;
-						await this.plugin.saveSettings();
-					})
-			);
-
-		new Setting(containerEl)
 			.setName('Sound chime on break')
 			.setDesc('Play a chime sound when a pomodoro break starts.')
 			.addToggle((toggle) =>

@@ -2,7 +2,6 @@ import { requestUrl } from 'obsidian';
 import type { TodoistTask } from './types';
 
 const API_BASE = 'https://api.todoist.com/api/v1';
-const SYNC_BASE = 'https://api.todoist.com/api/v1/sync';
 
 interface PaginatedResponse<T> {
 	results: T[];
@@ -91,37 +90,32 @@ export class TodoistClient {
 	 */
 	async getCompletedTasks(since?: Date): Promise<Array<{ task_id: string; content: string; completed_at: string; project_id: string }>> {
 		if (!this.token) return [];
-		try {
-			const params: Record<string, string> = {
-				sync_token: '*',
-				resource_types: JSON.stringify(['items']),
-			};
-			if (since) {
-				params.since = since.toISOString();
-			}
-			const body = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+		const rangeStart = since ?? new Date(Date.now() - 89 * 24 * 60 * 60 * 1000);
+		const completed: Array<{ task_id: string; content: string; completed_at: string; project_id: string }> = [];
+		let cursor: string | null = null;
+		do {
+			const params = new URLSearchParams({ since: rangeStart.toISOString(), limit: '50' });
+			if (cursor) params.set('cursor', cursor);
 			const response = await requestUrl({
-				url: `${SYNC_BASE}`,
-				method: 'POST',
-				headers: {
-					'Authorization': `Bearer ${this.token}`,
-					'Content-Type': 'application/x-www-form-urlencoded',
-				},
-				body,
+				url: `${API_BASE}/tasks/completed/by_completion_date?${params.toString()}`,
+				method: 'GET',
+				headers: { 'Authorization': `Bearer ${this.token}` },
 			});
-			const data = response.json as { items?: Array<{ id: string; content: string; completed_at?: string; checked?: boolean; is_deleted?: boolean }> };
-			if (!data.items) return [];
-			return data.items
-				.filter(item => item.completed_at && !item.is_deleted)
-				.map(item => ({
+			const data = response.json as {
+				items?: Array<{ id: string; content: string; completed_at?: string; project_id?: string; is_deleted?: boolean }>;
+				next_cursor?: string | null;
+			};
+			for (const item of data.items ?? []) {
+				if (!item.completed_at || item.is_deleted) continue;
+				completed.push({
 					task_id: item.id,
 					content: item.content,
-					completed_at: item.completed_at!,
-					project_id: '',
-				}));
-		} catch (err) {
-			console.error('Mikumodoro: Failed to fetch completed tasks', err);
-			return [];
-		}
+					completed_at: item.completed_at,
+					project_id: item.project_id ?? '',
+				});
+			}
+			cursor = data.next_cursor ?? null;
+		} while (cursor);
+		return completed;
 	}
 }

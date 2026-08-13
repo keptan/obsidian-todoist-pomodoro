@@ -169,6 +169,8 @@
 .mikumodoro-task-wrapper.subtask {
 	border-left: 2px solid var(--background-modifier-border);
 	margin-left: 16px;
+	margin-bottom: 0;
+	padding-bottom: 2px;
 }
 
 /* Task item row */
@@ -653,6 +655,7 @@ body.mikumodoro-is-resizing {
 	font-size: 0.5em;
 	background: var(--interactive-accent);
 	color: var(--text-on-accent);
+	border: none;
 	border-radius: 50%;
 	width: 10px;
 	height: 10px;

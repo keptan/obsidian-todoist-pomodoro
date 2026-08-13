@@ -17,12 +17,14 @@ export class TimerEngine {
 	private settings: MikumodoroSettings;
 	private sessions: PomodoroSession[] = [];
 	private onSessionComplete?: (session: PomodoroSession) => void;
+	private onWorkLimitReached?: () => void;
 	private onBreakStart?: () => void;
 	private onBreakEnd?: () => void;
 	private pausedMode: 'working' | 'break' | null = null;
 	private breakDurationMs = 0;
 	private accumulatedBreakMs = 0;
 	private breakExtended = false;
+	private workLimitNotified = false;
 
 	constructor(settings: MikumodoroSettings) {
 		this.settings = settings;
@@ -39,6 +41,10 @@ export class TimerEngine {
 
 	setOnSessionComplete(cb: (session: PomodoroSession) => void) {
 		this.onSessionComplete = cb;
+	}
+
+	setOnWorkLimitReached(cb: () => void) {
+		this.onWorkLimitReached = cb;
 	}
 
 	setOnBreakStart(cb: () => void) {
@@ -61,16 +67,13 @@ export class TimerEngine {
 				this.state.elapsedMs = Date.now() - this.state.startTime;
 				this.notify();
 
-				// Auto-complete work session when duration is reached
+				// Remind once at the target duration, but keep the timer running.
 				if (this.state.mode === 'working') {
 					const workMs = this.settings.defaultWorkMinutes * 60000;
-					if (this.state.elapsedMs >= workMs) {
-						if (this.settings.autoStartBreak) {
-							this.startBreak();
-						} else {
-							this.waitForBreak();
-						}
-						return;
+					if (this.state.elapsedMs >= workMs && !this.workLimitNotified) {
+						this.workLimitNotified = true;
+						this.onWorkLimitReached?.();
+						new Notice('Work target reached! Keep going or start your break when ready.');
 					}
 				}
 
@@ -127,6 +130,7 @@ export class TimerEngine {
 			pausedAt: null,
 		};
 		this.pausedMode = null;
+		this.workLimitNotified = false;
 		this.startInterval();
 		this.notify();
 		const taskName = task ? task.content : 'No task';
@@ -163,15 +167,6 @@ export class TimerEngine {
 
 		const breakMin = Math.round(breakMs / 60000);
 		new Notice(`Break for ~${breakMin} minutes`);
-	}
-
-	private waitForBreak() {
-		this.stopInterval();
-		this.pausedMode = 'working';
-		this.state.pausedAt = Date.now();
-		this.state.mode = 'paused';
-		this.notify();
-		new Notice('Work session complete! Start your break when you are ready.');
 	}
 
 	private recordCompletedWork(endTime: number) {
@@ -215,6 +210,7 @@ export class TimerEngine {
 			pausedAt: null,
 		};
 		this.pausedMode = null;
+		this.workLimitNotified = false;
 		this.breakDurationMs = 0;
 		this.startInterval();
 		this.notify();
@@ -256,6 +252,7 @@ export class TimerEngine {
 		this.breakDurationMs = 0;
 		this.accumulatedBreakMs = 0;
 		this.breakExtended = false;
+		this.workLimitNotified = false;
 
 		this.state = {
 			mode: 'idle',
@@ -338,8 +335,7 @@ export class TimerEngine {
 	}
 
 	isWaitingForBreak(): boolean {
-		return this.isPausedWork()
-			&& this.state.elapsedMs >= this.settings.defaultWorkMinutes * 60000;
+		return false;
 	}
 
 	getBreakRemainingMs(): number {
