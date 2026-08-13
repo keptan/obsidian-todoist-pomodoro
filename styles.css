@@ -614,7 +614,7 @@ body.mikumodoro-is-resizing {
 	width: 10px;
 	height: 10px;
 	border-radius: 2px;
-	background-color: var(--background-modifier-border);
+	background-color: var(--mikumodoro-heatmap-cell-background, var(--background-modifier-border));
 	flex-shrink: 0;
 	position: relative;
 }
@@ -695,7 +695,7 @@ body.mikumodoro-is-resizing {
 .mikumodoro-heatmap-month-cell {
 	aspect-ratio: 1;
 	border-radius: 4px;
-	background-color: var(--background-modifier-border);
+	background-color: var(--mikumodoro-heatmap-cell-background, var(--background-modifier-border));
 	display: flex;
 	align-items: flex-start;
 	justify-content: flex-end;
@@ -735,7 +735,7 @@ body.mikumodoro-is-resizing {
 
 .mikumodoro-heatmap-cell.is-drag-selected,
 .mikumodoro-heatmap-month-cell.is-drag-selected {
-	background: color-mix(in srgb, var(--interactive-accent) 28%, transparent) !important;
+	background-color: color-mix(in srgb, var(--interactive-accent) 28%, transparent);
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--interactive-accent) 45%, transparent);
 	outline: none;
 	filter: none;

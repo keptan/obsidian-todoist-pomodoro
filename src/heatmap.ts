@@ -240,7 +240,7 @@ function renderYearView(
 				cell.classList.add('empty');
 			} else {
 				const intensity = Math.min(1, minutes / maxMinutes);
-				cell.style.backgroundColor = interpolateColor(settings.heatmapColor, intensity);
+				cell.style.setProperty('--mikumodoro-heatmap-cell-background', interpolateColor(settings.heatmapColor, intensity));
 			}
 
 			if (isInYear) {
@@ -318,7 +318,7 @@ function renderMonthView(
 			cell.classList.add('future');
 		} else if (minutes > 0) {
 			const intensity = Math.min(1, minutes / maxMinutes);
-			cell.style.backgroundColor = interpolateColor(settings.heatmapColor, intensity);
+			cell.style.setProperty('--mikumodoro-heatmap-cell-background', interpolateColor(settings.heatmapColor, intensity));
 		} else {
 			cell.classList.add('empty');
 		}
