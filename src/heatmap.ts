@@ -1,3 +1,4 @@
+import { setIcon } from 'obsidian';
 import type { PomodoroSession, MikumodoroSettings } from './types';
 import type MikumodoroTimerPlugin from './main';
 import { formatLocalDate, formatMinutes } from './utils';
@@ -94,21 +95,23 @@ export function renderHeatmap(
 		header.createDiv({ cls: 'mikumodoro-heatmap-title-area' });
 
 		const navArea = header.createDiv({ cls: 'mikumodoro-heatmap-nav' });
-		const prevBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', text: '‹' });
+		const prevBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', attr: { 'aria-label': 'Previous period' } });
 		const labelEl = navArea.createSpan({ cls: 'mikumodoro-heatmap-nav-label' });
-		const nextBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', text: '›' });
+		const nextBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', attr: { 'aria-label': 'Next period' } });
+		setIcon(prevBtn, 'chevron-left');
+		setIcon(nextBtn, 'chevron-right');
 
 		const toggleArea = navArea;
 		const yearBtn = toggleArea.createEl('button', {
 			cls: 'mikumodoro-heatmap-toggle-btn' + (viewMode === 'year' ? ' active' : ''),
-			text: '📅',
 			attr: { 'aria-label': 'Year view' },
 		});
 		const monthBtn = toggleArea.createEl('button', {
 			cls: 'mikumodoro-heatmap-toggle-btn' + (viewMode === 'month' ? ' active' : ''),
-			text: '🗓️',
 			attr: { 'aria-label': 'Month view' },
 		});
+		setIcon(yearBtn, 'calendar-range');
+		setIcon(monthBtn, 'calendar-days');
 		yearBtn.addEventListener('click', () => { viewMode = 'year'; slideDirection = 'none'; render(); });
 		monthBtn.addEventListener('click', () => { viewMode = 'month'; slideDirection = 'none'; render(); });
 

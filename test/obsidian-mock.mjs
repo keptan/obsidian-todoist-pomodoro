@@ -5,3 +5,7 @@ export class Notice {
 export async function requestUrl(request) {
 	return globalThis.__obsidianRequestUrl(request);
 }
+
+export function setIcon(element, icon) {
+	element?.setAttribute?.('data-icon', icon);
+}
