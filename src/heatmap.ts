@@ -103,11 +103,11 @@ export function renderHeatmap(
 
 		const toggleArea = navArea;
 		const yearBtn = toggleArea.createEl('button', {
-			cls: 'mikumodoro-heatmap-toggle-btn' + (viewMode === 'year' ? ' active' : ''),
+			cls: 'clickable-icon mikumodoro-heatmap-toggle-btn' + (viewMode === 'year' ? ' is-active' : ''),
 			attr: { 'aria-label': 'Year view' },
 		});
 		const monthBtn = toggleArea.createEl('button', {
-			cls: 'mikumodoro-heatmap-toggle-btn' + (viewMode === 'month' ? ' active' : ''),
+			cls: 'clickable-icon mikumodoro-heatmap-toggle-btn' + (viewMode === 'month' ? ' is-active' : ''),
 			attr: { 'aria-label': 'Month view' },
 		});
 		setIcon(yearBtn, 'calendar-range');
