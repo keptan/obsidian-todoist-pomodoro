@@ -95,9 +95,9 @@ export function renderHeatmap(
 		header.createDiv({ cls: 'mikumodoro-heatmap-title-area' });
 
 		const navArea = header.createDiv({ cls: 'mikumodoro-heatmap-nav' });
-		const prevBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', attr: { 'aria-label': 'Previous period' } });
+		const prevBtn = navArea.createEl('button', { cls: 'clickable-icon mikumodoro-heatmap-nav-btn', attr: { 'aria-label': 'Previous period' } });
 		const labelEl = navArea.createSpan({ cls: 'mikumodoro-heatmap-nav-label' });
-		const nextBtn = navArea.createEl('button', { cls: 'mikumodoro-heatmap-nav-btn', attr: { 'aria-label': 'Next period' } });
+		const nextBtn = navArea.createEl('button', { cls: 'clickable-icon mikumodoro-heatmap-nav-btn', attr: { 'aria-label': 'Next period' } });
 		setIcon(prevBtn, 'chevron-left');
 		setIcon(nextBtn, 'chevron-right');
 
