@@ -1,7 +1,7 @@
 import { setIcon } from 'obsidian';
 import type { PomodoroSession, MikumodoroSettings } from './types';
 import type MikumodoroTimerPlugin from './main';
-import { formatLocalDate, formatMinutes } from './utils';
+import { formatLocalDate, formatMinutes, formatRollingYear, rollingYearWindow } from './utils';
 
 interface TaskMinutesEntry {
 	taskContent: string;
@@ -123,8 +123,8 @@ export function renderHeatmap(
 		else if (slideDirection === 'right') contentArea.classList.add('slide-right');
 
 		if (viewMode === 'year') {
-			if (plugin) requestHistory(`year:${currentYear}`, () => plugin.ensureCompletionHistoryForYear(currentYear));
-			labelEl.setText(String(currentYear));
+			if (plugin) requestHistory(`year:${currentYear}`, () => plugin.ensureCompletionHistoryForRollingYear(currentYear));
+			labelEl.setText(formatRollingYear(currentYear));
 			prevBtn.addEventListener('click', () => { currentYear--; slideDirection = 'right'; render(); });
 			nextBtn.addEventListener('click', () => {
 				if (currentYear < today.getFullYear()) { currentYear++; slideDirection = 'left'; render(); }
@@ -169,15 +169,12 @@ function renderYearView(
 	today: Date,
 	getMax: (start: Date, end: Date) => number,
 ) {
-	const yearStart = new Date(year, 0, 1);
-	const yearEnd = new Date(year, 11, 31);
+	const { start: yearStart, end: yearEnd } = rollingYearWindow(year, today);
 	const maxMinutes = getMax(yearStart, yearEnd);
 
 	const totalMinutes = sumMinutesInRange(dayMap, yearStart, yearEnd);
 	const statsEl = container.createDiv({ cls: 'mikumodoro-heatmap-stats' });
-	statsEl.setText(`${formatMinutes(totalMinutes)} in ${year}`);
-
-	const monthLabels = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+	statsEl.setText(`${formatMinutes(totalMinutes)} in this period`);
 
 	const gridWrapper = container.createDiv({ cls: 'mikumodoro-heatmap-grid-wrapper' });
 
@@ -194,32 +191,24 @@ function renderYearView(
 	const monthLabelRow = gridArea.createDiv({ cls: 'mikumodoro-heatmap-month-labels' });
 	const grid = gridArea.createDiv({ cls: 'mikumodoro-heatmap-grid' });
 
-	const startDate = new Date(year, 0, 1);
-	startDate.setDate(startDate.getDate() - startDate.getDay());
+	const cursor = new Date(yearEnd);
+	cursor.setDate(cursor.getDate() - cursor.getDay() - 52 * 7);
 
-	let currentWeek = 0;
-	const cursor = new Date(startDate);
-
-	while (cursor <= yearEnd && currentWeek < 54) {
+	for (let currentWeek = 0; currentWeek < 53; currentWeek++) {
 		const monthLabel = monthLabelRow.createSpan({ cls: 'mikumodoro-heatmap-month-label' });
-		const firstWeekDate = new Date(cursor);
-		const prevWeekDate = new Date(cursor.getTime() - 7 * 86400000);
-		if (firstWeekDate.getMonth() !== prevWeekDate.getMonth() || currentWeek === 0) {
-			const monthIdx = firstWeekDate.getMonth();
-			if (currentWeek === 0 && monthIdx === 11) {
-				monthLabel.setText('');
-			} else {
-				monthLabel.setText(monthLabels[monthIdx] ?? '');
-			}
-		}
+		const columnDates = Array.from({ length: 7 }, (_, offset) => {
+			const date = new Date(cursor);
+			date.setDate(cursor.getDate() + offset);
+			return date;
+		});
+		const validDates = columnDates.filter(date => date >= yearStart && date <= yearEnd);
+		const monthStart = currentWeek === 0 ? validDates[0] : validDates.find(date => date.getDate() === 1);
+		monthLabel.setText(monthStart?.toLocaleDateString(undefined, { month: 'short' }) ?? '');
 
 		const weekCol = grid.createDiv({ cls: 'mikumodoro-heatmap-week' });
 
-		for (let d = 0; d < 7; d++) {
-			const date = new Date(cursor);
-			date.setDate(cursor.getDate() + d);
-
-			const isInYear = date.getFullYear() === year;
+		for (const date of columnDates) {
+			const isInYear = date >= yearStart && date <= yearEnd;
 			const dateStr = formatLocalDate(date);
 			const minutes = dayMap.get(dateStr) ?? 0;
 			const completions = completionMap[dateStr]?.length ?? 0;
@@ -261,7 +250,6 @@ function renderYearView(
 		}
 
 		cursor.setDate(cursor.getDate() + 7);
-		currentWeek++;
 	}
 
 	renderLegend(container, settings);

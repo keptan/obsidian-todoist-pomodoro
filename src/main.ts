@@ -13,7 +13,7 @@ import { TodoistClient } from './todoist';
 import { TimerEngine } from './timer';
 import { TimerView, TIMER_VIEW_TYPE } from './view';
 import { renderHeatmap } from './heatmap';
-import { formatLocalDate } from './utils';
+import { formatLocalDate, rollingYearWindow } from './utils';
 import { SerializedSaveQueue } from './persistence';
 import { removeTaskTree } from './task-cache';
 
@@ -32,6 +32,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private saveTimer: number | null = null;
 	private saveQueue = new SerializedSaveQueue();
 	private lastDataSignature = '';
+	private dateRolloverTimer: number | null = null;
 
 	private scheduleSave(delayMs = 2000) {
 		if (this.saveTimer !== null) return;
@@ -216,12 +217,13 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			void this.reloadFromDisk();
 		}, 60000));
 
-		// Populate the entire default calendar year. Older years load on navigation.
+		// Populate the default rolling year. Older periods load on navigation.
 		if (this.settings.todoistApiToken) {
-			void this.ensureCompletionHistoryForYear(new Date().getFullYear()).catch(err => {
+			void this.ensureCompletionHistoryForRollingYear(new Date().getFullYear()).catch(err => {
 				console.error('Mikumodoro: Boot history sync failed', err);
 			});
 		}
+		this.scheduleDateRollover();
 
 		// Request notification permission if enabled
 		if (this.settings.notificationsEnabled && 'Notification' in window) {
@@ -239,6 +241,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		if (this.saveTimer !== null) {
 			window.clearTimeout(this.saveTimer);
 			this.saveTimer = null;
+		}
+		if (this.dateRolloverTimer !== null) {
+			window.clearTimeout(this.dateRolloverTimer);
+			this.dateRolloverTimer = null;
 		}
 		if (hadScheduledSave) {
 			await this.savePluginData();
@@ -486,6 +492,13 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	async ensureCompletionHistoryForYear(year: number): Promise<boolean> {
 		return this.ensureCompletionHistoryRange(new Date(year, 0, 1), new Date(year + 1, 0, 1));
+	}
+
+	async ensureCompletionHistoryForRollingYear(year: number): Promise<boolean> {
+		const { start, end } = rollingYearWindow(year);
+		const exclusiveEnd = new Date(end);
+		exclusiveEnd.setDate(exclusiveEnd.getDate() + 1);
+		return this.ensureCompletionHistoryRange(start, exclusiveEnd);
 	}
 
 	async ensureCompletionHistoryForMonth(year: number, month: number): Promise<boolean> {
@@ -774,6 +787,19 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				this.heatmapElements.delete(el);
 			}
 		}
+	}
+
+	private scheduleDateRollover(): void {
+		if (this.dateRolloverTimer !== null) window.clearTimeout(this.dateRolloverTimer);
+		const now = new Date();
+		const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
+		this.dateRolloverTimer = window.setTimeout(() => {
+			this.dateRolloverTimer = null;
+			this.lastDataSignature = '';
+			this.refreshHeatmaps();
+			this.refreshViews();
+			this.scheduleDateRollover();
+		}, nextDay.getTime() - now.getTime());
 	}
 
 	async reloadFromDisk() {

@@ -40,3 +40,18 @@ export function formatLocalDate(date: Date | number): string {
 	const day = String(d.getDate()).padStart(2, '0');
 	return `${y}-${m}-${day}`;
 }
+
+export function rollingYearWindow(year: number, today = new Date()): { start: Date; end: Date } {
+	const month = today.getMonth();
+	const day = today.getDate();
+	const end = new Date(year, month, Math.min(day, new Date(year, month + 1, 0).getDate()));
+	const startYear = year - 1;
+	const start = new Date(startYear, month, Math.min(day, new Date(startYear, month + 1, 0).getDate()));
+	return { start, end };
+}
+
+export function formatRollingYear(year: number): string {
+	const { start, end } = rollingYearWindow(year);
+	const format = (date: Date) => date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+	return `${format(start)} – ${format(end)}`;
+}

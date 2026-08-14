@@ -1,5 +1,14 @@
 import { strict as assert } from 'node:assert';
 import { buildTooltip, formatSelectionSummary, summarizeSelectedDays } from '../src/heatmap.ts';
+import { formatLocalDate, rollingYearWindow } from '../src/utils.ts';
+
+const rolling = rollingYearWindow(2026, new Date(2026, 7, 14));
+assert.equal(formatLocalDate(rolling.start), '2025-08-14');
+assert.equal(formatLocalDate(rolling.end), '2026-08-14');
+
+const leapRolling = rollingYearWindow(2025, new Date(2024, 1, 29));
+assert.equal(formatLocalDate(leapRolling.start), '2024-02-29');
+assert.equal(formatLocalDate(leapRolling.end), '2025-02-28');
 
 const taskEntries = [
 	{ taskContent: 'smallest', minutes: 5 },
