@@ -21,9 +21,11 @@ export function renderHeatmap(
 	settings: MikumodoroSettings,
 	plugin?: MikumodoroTimerPlugin,
 ) {
+	removeTooltipFor(container);
 	container.empty();
 	container.classList.add('mikumodoro-heatmap-container');
 	const surface = container.createDiv({ cls: 'mikumodoro-heatmap-surface' });
+	const tooltips = attachTooltips(container);
 
 	let viewMode: 'year' | 'month' = settings.heatmapViewMode ?? 'year';
 	let currentYear = new Date().getFullYear();
@@ -153,10 +155,10 @@ export function renderHeatmap(
 			}
 			renderMonthView(contentArea, currentYear, currentMonth, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange);
 		}
+		tooltips.bindCells(surface);
 	}
 
 	render();
-	attachTooltips(surface, container);
 	attachDragSelection(surface, container);
 }
 
@@ -373,40 +375,57 @@ export function buildTooltip(
 	return lines.join('\n');
 }
 
-function attachTooltips(surface: HTMLElement, owner: HTMLElement) {
-	const tooltipEl = owner.createDiv({ cls: 'mikumodoro-heatmap-tooltip' });
-	let hoveredCell: HTMLElement | null = null;
+const tooltipCleanups = new WeakMap<HTMLElement, () => void>();
+
+function removeTooltipFor(owner: HTMLElement): void {
+	tooltipCleanups.get(owner)?.();
+}
+
+function attachTooltips(owner: HTMLElement): { bindCells: (surface: HTMLElement) => void } {
+	const tooltipEl = document.body.createDiv({ cls: 'mikumodoro-heatmap-tooltip' });
+	let activeCell: HTMLElement | null = null;
 
 	const show = (target: HTMLElement) => {
 		const text = target.getAttribute('data-tooltip');
 		if (!text) return;
+		activeCell = target;
 		tooltipEl.textContent = text;
 		tooltipEl.classList.add('is-visible');
 		const rect = target.getBoundingClientRect();
 		const tipRect = tooltipEl.getBoundingClientRect();
 		let left = rect.left + rect.width / 2 - tipRect.width / 2;
-		let top = rect.top - tipRect.height - 6;
-		left = Math.max(4, Math.min(left, window.innerWidth - tipRect.width - 4));
-		if (top < 4) top = rect.bottom + 6;
+		let top = rect.top - tipRect.height - 8;
+		left = Math.max(6, Math.min(left, window.innerWidth - tipRect.width - 6));
+		if (top < 6) top = rect.bottom + 8;
 		tooltipEl.style.left = `${left}px`;
 		tooltipEl.style.top = `${top}px`;
 	};
 
-	surface.addEventListener('pointerover', (e) => {
-		const target = (e.target as HTMLElement).closest<HTMLElement>('.has-tooltip');
-		if (target && surface.contains(target) && target !== hoveredCell) {
-			hoveredCell = target;
-			show(target);
-		}
-	});
-
-	surface.addEventListener('pointerout', (e) => {
-		if (!hoveredCell) return;
-		const next = e.relatedTarget as Node | null;
-		if (next && hoveredCell.contains(next)) return;
-		hoveredCell = null;
+	const hide = (event: MouseEvent) => {
+		if (event.currentTarget !== activeCell) return;
+		activeCell = null;
 		tooltipEl.classList.remove('is-visible');
+	};
+
+	const observer = new MutationObserver(() => {
+		if (!owner.isConnected) cleanup();
 	});
+	const cleanup = () => {
+		observer.disconnect();
+		tooltipEl.remove();
+		tooltipCleanups.delete(owner);
+	};
+	observer.observe(document.body, { childList: true, subtree: true });
+	tooltipCleanups.set(owner, cleanup);
+
+	return {
+		bindCells(surface: HTMLElement) {
+			surface.querySelectorAll<HTMLElement>('.has-tooltip').forEach(cell => {
+				cell.addEventListener('mouseenter', () => show(cell));
+				cell.addEventListener('mouseleave', hide);
+			});
+		},
+	};
 }
 
 export function summarizeSelectedDays(
