@@ -14,7 +14,7 @@ import { TimerEngine } from './timer';
 import { TimerView, TIMER_VIEW_TYPE } from './view';
 import { renderHeatmap } from './heatmap';
 import { formatLocalDate, rollingYearWindow } from './utils';
-import { SerializedSaveQueue } from './persistence';
+import { DateRange, getUncoveredDateRanges, mergeDateRanges, SerializedSaveQueue } from './persistence';
 import { removeTaskTree } from './task-cache';
 
 export default class MikumodoroTimerPlugin extends Plugin {
@@ -26,12 +26,12 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private selectedTask: TodoistTask | null = null;
 	private taskNoteMap: TaskNoteMap = {};
 	private completionMap: CompletionMap = {};
+	private completionHistoryCoverage: DateRange[] = [];
 	private completionHistoryLoads = new Map<string, Promise<boolean>>();
 	private customActivityLabels: string[] = [];
 	private heatmapElements: Set<HTMLElement> = new Set();
 	private saveTimer: number | null = null;
 	private saveQueue = new SerializedSaveQueue();
-	private lastDataSignature = '';
 	private dateRolloverTimer: number | null = null;
 
 	private scheduleSave(delayMs = 2000) {
@@ -66,6 +66,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			taskNotes?: TaskNoteMap;
 			completions?: CompletionMap;
 			customActivityLabels?: string[];
+			completionHistoryCoverage?: DateRange[];
 		};
 		if (savedData?.sessions) {
 			this.timerEngine.loadSessions(savedData.sessions);
@@ -78,6 +79,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 		if (savedData?.customActivityLabels) {
 			this.customActivityLabels = savedData.customActivityLabels;
+		}
+		if (Array.isArray(savedData?.completionHistoryCoverage)) {
+			this.completionHistoryCoverage = mergeDateRanges(savedData.completionHistoryCoverage);
 		}
 
 		// Merge any pending files from other devices (sync-safe transport)
@@ -279,6 +283,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				taskNotes: this.taskNoteMap,
 				completions: this.completionMap,
 				customActivityLabels: this.customActivityLabels,
+				completionHistoryCoverage: this.completionHistoryCoverage,
 			});
 		});
 	}
@@ -328,8 +333,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 					try {
 						const content = await this.app.vault.adapter.read(file);
 						const session = JSON.parse(content) as PomodoroSession;
-						this.timerEngine.mergeSessions([session]);
-						changed = true;
+						changed = this.timerEngine.mergeSessions([session]) || changed;
 						await this.app.vault.adapter.remove(file);
 					} catch (err) {
 						console.error('Mikumodoro: Failed to merge pending session file', file, err);
@@ -502,12 +506,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	}
 
 	async ensureCompletionHistoryForMonth(year: number, month: number): Promise<boolean> {
-		const yearKey = `${formatLocalDate(new Date(year, 0, 1))}:${formatLocalDate(new Date(year + 1, 0, 1))}`;
-		const yearLoad = this.completionHistoryLoads.get(yearKey);
-		if (yearLoad) {
-			await yearLoad;
-			return false;
-		}
 		return this.ensureCompletionHistoryRange(new Date(year, month, 1), new Date(year, month + 1, 1));
 	}
 
@@ -516,23 +514,36 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		const key = `${formatLocalDate(start)}:${formatLocalDate(end)}`;
 		const existing = this.completionHistoryLoads.get(key);
 		if (existing) {
-			await existing;
-			return false;
+			return existing;
 		}
 
-		const load = this.syncCompletedHistoryRange(start, end).then(() => true);
+		const requested = { start: formatLocalDate(start), end: formatLocalDate(end) };
+		const uncovered = getUncoveredDateRanges(requested, this.completionHistoryCoverage);
+		if (uncovered.length === 0) return false;
+		const load = (async () => {
+			let changed = false;
+			for (const range of uncovered) {
+				changed = await this.syncCompletedHistoryRange(
+					new Date(`${range.start}T00:00:00`),
+					new Date(`${range.end}T00:00:00`),
+				) || changed;
+				this.completionHistoryCoverage = mergeDateRanges([...this.completionHistoryCoverage, range]);
+			}
+			await this.savePluginData();
+			return changed;
+		})();
 		this.completionHistoryLoads.set(key, load);
 		try {
 			return await load;
-		} catch (err) {
+		} finally {
 			this.completionHistoryLoads.delete(key);
-			throw err;
 		}
 	}
 
-	private async syncCompletedHistoryRange(start: Date, end: Date) {
+	private async syncCompletedHistoryRange(start: Date, end: Date): Promise<boolean> {
 		try {
 			const completed = [];
+			let changed = false;
 			let chunkStart = new Date(start);
 			while (chunkStart < end) {
 				const chunkEnd = new Date(Math.min(end.getTime(), chunkStart.getTime() + 89 * 24 * 60 * 60 * 1000));
@@ -553,10 +564,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 						timestamp: new Date(item.completed_at).getTime(),
 					};
 					this.completionMap[dateStr].push(completionRecord);
-					await this.writePendingCompletion(dateStr, completionRecord);
+					changed = true;
 				}
 			}
-			await this.savePluginData();
+			return changed;
 		} catch (err) {
 			console.error('Mikumodoro: Failed to sync completed history', err);
 			throw err;
@@ -760,25 +771,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	refreshHeatmaps() {
 		const sessions = this.timerEngine.getSessions();
-		const completions = this.getCompletionMap();
-		const tasks = this.cachedTasks;
-		const sessionSig = sessions
-			.map(s => `${s.id}:${s.startTime}:${s.endTime}:${s.durationMinutes}:${s.completed}`)
-			.join('|');
-		const completionSig = Object.entries(completions)
-			.sort(([a], [b]) => a.localeCompare(b))
-			.flatMap(([date, records]) => records.map(r => `${date}:${r.taskId}:${r.timestamp}:${r.taskContent}`))
-			.join('|');
-		const taskSig = tasks
-			.map(t => `${t.id}:${t.content}:${t.due?.date ?? ''}:${t.checked ?? ''}`)
-			.sort()
-			.join('|');
-		const sig = `${sessionSig}||${completionSig}||${taskSig}`;
-		if (sig === this.lastDataSignature) {
-			// Data unchanged, skip re-render
-			return;
-		}
-		this.lastDataSignature = sig;
 		for (const el of this.heatmapElements) {
 			if (el.isConnected) {
 				el.empty();
@@ -795,7 +787,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		const nextDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
 		this.dateRolloverTimer = window.setTimeout(() => {
 			this.dateRolloverTimer = null;
-			this.lastDataSignature = '';
 			this.refreshHeatmaps();
 			this.refreshViews();
 			this.scheduleDateRollover();
@@ -818,6 +809,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			completions?: CompletionMap;
 			taskNotes?: TaskNoteMap;
 			customActivityLabels?: string[];
+			completionHistoryCoverage?: DateRange[];
 		};
 		if (!data) return;
 		let changed = false;
@@ -876,13 +868,23 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		}
 
+		if (Array.isArray(data.completionHistoryCoverage)) {
+			const mergedCoverage = mergeDateRanges([
+				...this.completionHistoryCoverage,
+				...data.completionHistoryCoverage,
+			]);
+			if (JSON.stringify(mergedCoverage) !== JSON.stringify(this.completionHistoryCoverage)) {
+				this.completionHistoryCoverage = mergedCoverage;
+				changed = true;
+			}
+		}
+
 		// Also merge any pending files synced from other devices
 		if (await this.mergePendingFiles()) {
 			changed = true;
 		}
 
 		if (changed) {
-			this.lastDataSignature = ''; // force heatmap refresh
 			this.refreshHeatmaps();
 			this.refreshViews();
 			// Persist merged data back to disk so the other device's writes

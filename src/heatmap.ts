@@ -23,6 +23,7 @@ export function renderHeatmap(
 ) {
 	container.empty();
 	container.classList.add('mikumodoro-heatmap-container');
+	const surface = container.createDiv({ cls: 'mikumodoro-heatmap-surface' });
 
 	let viewMode: 'year' | 'month' = settings.heatmapViewMode ?? 'year';
 	let currentYear = new Date().getFullYear();
@@ -32,7 +33,9 @@ export function renderHeatmap(
 	function requestHistory(key: string, request: () => Promise<boolean>) {
 		if (requestedHistoryRanges.has(key)) return;
 		requestedHistoryRanges.add(key);
-		void request().then(() => render()).catch(err => {
+		void request().then(changed => {
+			if (changed) render();
+		}).catch(err => {
 			requestedHistoryRanges.delete(key);
 			console.error('Mikumodoro: Failed to load completion history', err);
 		});
@@ -89,9 +92,9 @@ export function renderHeatmap(
 	let slideDirection: 'left' | 'right' | 'none' = 'none';
 
 	function render() {
-		container.empty();
+		surface.empty();
 
-		const header = container.createDiv({ cls: 'mikumodoro-heatmap-header' });
+		const header = surface.createDiv({ cls: 'mikumodoro-heatmap-header' });
 		header.createDiv({ cls: 'mikumodoro-heatmap-title-area' });
 
 		const navArea = header.createDiv({ cls: 'mikumodoro-heatmap-nav' });
@@ -118,7 +121,7 @@ export function renderHeatmap(
 		const today = new Date();
 		today.setHours(0, 0, 0, 0);
 
-		const contentArea = container.createDiv({ cls: 'mikumodoro-heatmap-content' });
+		const contentArea = surface.createDiv({ cls: 'mikumodoro-heatmap-content' });
 		if (slideDirection === 'left') contentArea.classList.add('slide-left');
 		else if (slideDirection === 'right') contentArea.classList.add('slide-right');
 
@@ -153,8 +156,8 @@ export function renderHeatmap(
 	}
 
 	render();
-	attachTooltips(container);
-	attachDragSelection(container);
+	attachTooltips(surface, container);
+	attachDragSelection(surface, container);
 }
 
 function renderYearView(
@@ -370,16 +373,9 @@ export function buildTooltip(
 	return lines.join('\n');
 }
 
-function attachTooltips(container: HTMLElement) {
-	if (container.dataset.tooltipsAttached) return;
-	container.dataset.tooltipsAttached = '1';
-
-	let tooltipEl = document.body.querySelector<HTMLElement>('.mikumodoro-heatmap-tooltip');
-	if (!tooltipEl) {
-		tooltipEl = createDiv();
-		tooltipEl.className = 'mikumodoro-heatmap-tooltip';
-		document.body.appendChild(tooltipEl);
-	}
+function attachTooltips(surface: HTMLElement, owner: HTMLElement) {
+	const tooltipEl = owner.createDiv({ cls: 'mikumodoro-heatmap-tooltip' });
+	let hoveredCell: HTMLElement | null = null;
 
 	const show = (target: HTMLElement) => {
 		const text = target.getAttribute('data-tooltip');
@@ -396,16 +392,19 @@ function attachTooltips(container: HTMLElement) {
 		tooltipEl.style.top = `${top}px`;
 	};
 
-	container.addEventListener('mouseover', (e) => {
+	surface.addEventListener('pointerover', (e) => {
 		const target = (e.target as HTMLElement).closest<HTMLElement>('.has-tooltip');
-		if (target) {
+		if (target && surface.contains(target) && target !== hoveredCell) {
+			hoveredCell = target;
 			show(target);
-		} else {
-			tooltipEl.classList.remove('is-visible');
 		}
 	});
 
-	container.addEventListener('mouseleave', () => {
+	surface.addEventListener('pointerout', (e) => {
+		if (!hoveredCell) return;
+		const next = e.relatedTarget as Node | null;
+		if (next && hoveredCell.contains(next)) return;
+		hoveredCell = null;
 		tooltipEl.classList.remove('is-visible');
 	});
 }
@@ -442,14 +441,18 @@ export function formatSelectionSummary(summary: SelectionSummary): string {
 	return lines.join('\n');
 }
 
-function attachDragSelection(container: HTMLElement) {
-	if (container.dataset.dragSelectionAttached) return;
-	container.dataset.dragSelectionAttached = '1';
+function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
+	interface SelectableCell {
+		el: HTMLElement;
+		minutes: number;
+		completions: number;
+		tasks: TaskMinutesEntry[];
+	}
 
-	container.addEventListener('pointerdown', (event) => {
+	surface.addEventListener('pointerdown', (event) => {
 		if (event.button !== 0) return;
 		const target = (event.target as HTMLElement).closest<HTMLElement>('[data-selection-day]');
-		if (!target || !container.contains(target)) return;
+		if (!target || !surface.contains(target)) return;
 
 		event.preventDefault();
 		const startX = event.clientX;
@@ -457,8 +460,25 @@ function attachDragSelection(container: HTMLElement) {
 		const selectionBox = document.body.createDiv({ cls: 'mikumodoro-heatmap-selection-box' });
 		const statsEl = selectionBox.createDiv({ cls: 'mikumodoro-heatmap-selection-stats' });
 		const selectedCells = new Set<HTMLElement>();
-		document.body.querySelector<HTMLElement>('.mikumodoro-heatmap-tooltip')?.classList.remove('is-visible');
-		container.classList.add('is-drag-selecting');
+		owner.querySelector<HTMLElement>('.mikumodoro-heatmap-tooltip')?.classList.remove('is-visible');
+		owner.classList.add('is-drag-selecting');
+		const cells: SelectableCell[] = Array.from(surface.querySelectorAll<HTMLElement>('[data-selection-day]')).map(el => {
+			let tasks: TaskMinutesEntry[] = [];
+			try {
+				tasks = JSON.parse(el.dataset.selectionTasks ?? '[]') as TaskMinutesEntry[];
+			} catch {
+				// A malformed data attribute should not break drag selection.
+			}
+			return {
+				el,
+				minutes: Number(el.dataset.selectionMinutes) || 0,
+				completions: Number(el.dataset.selectionCompletions) || 0,
+				tasks,
+			};
+		});
+		let animationFrame: number | null = null;
+		let pendingX = startX;
+		let pendingY = startY;
 
 		const update = (clientX: number, clientY: number) => {
 			const left = Math.min(startX, clientX);
@@ -472,22 +492,16 @@ function attachDragSelection(container: HTMLElement) {
 
 			selectedCells.clear();
 			const selectedDays: Array<{ minutes: number; completions: number; tasks: TaskMinutesEntry[] }> = [];
-			for (const cell of Array.from(container.querySelectorAll<HTMLElement>('[data-selection-day]'))) {
-				const rect = cell.getBoundingClientRect();
+			for (const cell of cells) {
+				const rect = cell.el.getBoundingClientRect();
 				const intersects = rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
-				cell.classList.toggle('is-drag-selected', intersects);
+				cell.el.classList.toggle('is-drag-selected', intersects);
 				if (intersects) {
-					selectedCells.add(cell);
-					let tasks: TaskMinutesEntry[] = [];
-					try {
-						tasks = JSON.parse(cell.dataset.selectionTasks ?? '[]') as TaskMinutesEntry[];
-					} catch {
-						// A malformed data attribute should not break drag selection.
-					}
+					selectedCells.add(cell.el);
 					selectedDays.push({
-						minutes: Number(cell.dataset.selectionMinutes) || 0,
-						completions: Number(cell.dataset.selectionCompletions) || 0,
-						tasks,
+						minutes: cell.minutes,
+						completions: cell.completions,
+						tasks: cell.tasks,
 					});
 				}
 			}
@@ -497,8 +511,9 @@ function attachDragSelection(container: HTMLElement) {
 
 		const finish = () => {
 			for (const cell of selectedCells) cell.classList.remove('is-drag-selected');
-			container.classList.remove('is-drag-selecting');
+			owner.classList.remove('is-drag-selecting');
 			selectionBox.remove();
+			if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('pointerup', finish);
 			window.removeEventListener('pointercancel', finish);
@@ -506,7 +521,13 @@ function attachDragSelection(container: HTMLElement) {
 		};
 		const onMove = (moveEvent: PointerEvent) => {
 			moveEvent.preventDefault();
-			update(moveEvent.clientX, moveEvent.clientY);
+			pendingX = moveEvent.clientX;
+			pendingY = moveEvent.clientY;
+			if (animationFrame !== null) return;
+			animationFrame = window.requestAnimationFrame(() => {
+				animationFrame = null;
+				update(pendingX, pendingY);
+			});
 		};
 
 		window.addEventListener('pointermove', onMove, { passive: false });

@@ -1,4 +1,9 @@
-import { SerializedSaveQueue } from '../src/persistence.ts';
+import assert from 'node:assert/strict';
+import {
+	getUncoveredDateRanges,
+	mergeDateRanges,
+	SerializedSaveQueue,
+} from '../src/persistence.ts';
 
 const queue = new SerializedSaveQueue();
 const writes = [];
@@ -27,3 +32,29 @@ await queue.drain();
 if (writes.at(-1) !== 'after-failure') {
 	throw new Error('A failed write poisoned the save queue');
 }
+
+assert.deepEqual(
+	mergeDateRanges([
+		{ start: '2026-02-01', end: '2026-03-01' },
+		{ start: '2026-01-01', end: '2026-02-01' },
+		{ start: '2026-04-01', end: '2026-05-01' },
+	]),
+	[
+		{ start: '2026-01-01', end: '2026-03-01' },
+		{ start: '2026-04-01', end: '2026-05-01' },
+	],
+);
+
+assert.deepEqual(
+	getUncoveredDateRanges(
+		{ start: '2026-01-01', end: '2026-06-01' },
+		[
+			{ start: '2025-12-01', end: '2026-02-01' },
+			{ start: '2026-03-01', end: '2026-05-01' },
+		],
+	),
+	[
+		{ start: '2026-02-01', end: '2026-03-01' },
+		{ start: '2026-05-01', end: '2026-06-01' },
+	],
+);

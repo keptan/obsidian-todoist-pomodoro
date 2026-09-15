@@ -305,13 +305,17 @@ export class TimerEngine {
 	 * Only adds sessions that don't already exist locally.
 	 * Safe to call during an active timer (doesn't touch timer state).
 	 */
-	mergeSessions(newSessions: PomodoroSession[]) {
+	mergeSessions(newSessions: PomodoroSession[]): boolean {
 		const existingIds = new Set(this.sessions.map(s => s.id));
+		let changed = false;
 		for (const s of newSessions) {
 			if (!existingIds.has(s.id)) {
 				this.sessions.push(s);
+				existingIds.add(s.id);
+				changed = true;
 			}
 		}
+		return changed;
 	}
 
 	addManualSession(session: PomodoroSession) {

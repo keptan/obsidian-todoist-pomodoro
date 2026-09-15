@@ -26,3 +26,40 @@ export class SerializedSaveQueue {
 		await this.queue;
 	}
 }
+
+export interface DateRange {
+	start: string;
+	end: string;
+}
+
+export function mergeDateRanges(ranges: DateRange[]): DateRange[] {
+	const sorted = ranges
+		.filter(range => range.start < range.end)
+		.sort((a, b) => a.start.localeCompare(b.start));
+	const merged: DateRange[] = [];
+	for (const range of sorted) {
+		const previous = merged[merged.length - 1];
+		if (!previous || range.start > previous.end) {
+			merged.push({ ...range });
+		} else if (range.end > previous.end) {
+			previous.end = range.end;
+		}
+	}
+	return merged;
+}
+
+export function getUncoveredDateRanges(requested: DateRange, coverage: DateRange[]): DateRange[] {
+	const missing: DateRange[] = [];
+	let cursor = requested.start;
+	for (const range of mergeDateRanges(coverage)) {
+		if (range.end <= cursor) continue;
+		if (range.start >= requested.end) break;
+		if (range.start > cursor) {
+			missing.push({ start: cursor, end: range.start < requested.end ? range.start : requested.end });
+		}
+		if (range.end > cursor) cursor = range.end;
+		if (cursor >= requested.end) break;
+	}
+	if (cursor < requested.end) missing.push({ start: cursor, end: requested.end });
+	return missing;
+}
