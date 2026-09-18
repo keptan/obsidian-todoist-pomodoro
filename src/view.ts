@@ -1,7 +1,7 @@
 import { ItemView, WorkspaceLeaf, Notice, Modal, setIcon } from 'obsidian';
 import type MikumodoroTimerPlugin from './main';
 import type { TodoistTask, TimerState } from './types';
-import { formatTimerDisplay, formatLocalDate, formatMinutes } from './utils';
+import { formatTimerDisplay, formatLocalDate, formatMinutes, getSessionDateKey } from './utils';
 
 export const TIMER_VIEW_TYPE = 'obsidian-todoist-pomodoro-view';
 
@@ -1144,7 +1144,7 @@ export class TimerView extends ItemView {
 		const today = formatLocalDate(new Date());
 		const todaySessions = this.plugin.timerEngine
 			.getSessions()
-			.filter((s) => formatLocalDate(new Date(s.startTime)) === today);
+			.filter((s) => getSessionDateKey(s) === today);
 
 		const section = container.createDiv({ cls: 'mikumodoro-sessions-section' });
 

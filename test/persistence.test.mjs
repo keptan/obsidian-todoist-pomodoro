@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+	getDateRangesToSync,
 	getUncoveredDateRanges,
 	mergeDateRanges,
 	SerializedSaveQueue,
@@ -57,4 +58,22 @@ assert.deepEqual(
 		{ start: '2026-02-01', end: '2026-03-01' },
 		{ start: '2026-05-01', end: '2026-06-01' },
 	],
+);
+
+assert.deepEqual(
+	getDateRangesToSync(
+		{ start: '2026-01-01', end: '2026-09-19' },
+		[{ start: '2026-01-01', end: '2026-09-19' }],
+		'2026-09-16',
+	),
+	[{ start: '2026-09-16', end: '2026-09-19' }],
+);
+
+assert.deepEqual(
+	getDateRangesToSync(
+		{ start: '2025-01-01', end: '2025-02-01' },
+		[{ start: '2025-01-01', end: '2025-02-01' }],
+		'2026-09-16',
+	),
+	[],
 );

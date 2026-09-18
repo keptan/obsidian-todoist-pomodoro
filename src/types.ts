@@ -58,6 +58,8 @@ export interface PomodoroSession {
 	endTime: number;
 	durationMinutes: number;
 	completed: boolean;
+	/** Calendar date selected by the user, independent of device timezone. */
+	dateKey?: string;
 }
 
 export interface TimerState {

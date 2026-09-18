@@ -160,9 +160,19 @@ assert(continuousEngine.getState().mode === 'working', 'Work target should not s
 assert(workLimitNotifications === 1, 'Work target should notify once');
 continuousEngine.tick();
 assert(workLimitNotifications === 1, 'Work target should not notify repeatedly');
+
+// Device session records merge additively and idempotently regardless of order.
+const syncEngine = new TimerEngine(settings);
+const deviceASession = { ...savedSessions[0], id: 'device-a-session' };
+const deviceBSession = { ...savedSessions[0], id: 'device-b-session' };
+assert(syncEngine.mergeSessions([deviceASession]), 'First device session should merge');
+assert(syncEngine.mergeSessions([deviceBSession]), 'Second device session should merge');
+assert(!syncEngine.mergeSessions([deviceASession]), 'Repeated sync record should be ignored');
+assert(syncEngine.getSessions().length === 2, 'Both device sessions should remain present');
 engine.destroy();
 newEngine.destroy();
 continuousEngine.destroy();
+syncEngine.destroy();
 
 console.log('---');
 console.log(`Results: ${passed} passed, ${failed} failed`);

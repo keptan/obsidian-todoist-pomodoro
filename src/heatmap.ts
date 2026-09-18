@@ -1,7 +1,7 @@
 import { setIcon } from 'obsidian';
 import type { PomodoroSession, MikumodoroSettings } from './types';
 import type MikumodoroTimerPlugin from './main';
-import { formatLocalDate, formatMinutes, formatRollingYear, rollingYearWindow } from './utils';
+import { formatLocalDate, formatMinutes, formatRollingYear, getSessionDateKey, rollingYearWindow } from './utils';
 
 interface TaskMinutesEntry {
 	taskContent: string;
@@ -47,7 +47,7 @@ export function renderHeatmap(
 	const dayMap = new Map<string, number>();
 	const dayTaskMap = new Map<string, TaskMinutesEntry[]>();
 	for (const s of sessions) {
-		const day = formatLocalDate(new Date(s.startTime));
+		const day = getSessionDateKey(s);
 		dayMap.set(day, (dayMap.get(day) ?? 0) + s.durationMinutes);
 		if (!dayTaskMap.has(day)) dayTaskMap.set(day, []);
 		const entries = dayTaskMap.get(day)!;

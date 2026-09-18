@@ -318,11 +318,6 @@ export class TimerEngine {
 		return changed;
 	}
 
-	addManualSession(session: PomodoroSession) {
-		this.sessions.push(session);
-		this.onSessionComplete?.(session);
-	}
-
 	getElapsedMs(): number {
 		if (this.state.startTime && (this.state.mode === 'working' || this.state.mode === 'break')) {
 			return Date.now() - this.state.startTime;

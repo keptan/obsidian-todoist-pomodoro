@@ -63,3 +63,19 @@ export function getUncoveredDateRanges(requested: DateRange, coverage: DateRange
 	if (cursor < requested.end) missing.push({ start: cursor, end: requested.end });
 	return missing;
 }
+
+/** Include a recent overlap so newly-created remote history is discovered. */
+export function getDateRangesToSync(
+	requested: DateRange,
+	coverage: DateRange[],
+	refreshFrom?: string,
+): DateRange[] {
+	const ranges = getUncoveredDateRanges(requested, coverage);
+	if (refreshFrom && refreshFrom < requested.end) {
+		ranges.push({
+			start: refreshFrom > requested.start ? refreshFrom : requested.start,
+			end: requested.end,
+		});
+	}
+	return mergeDateRanges(ranges);
+}

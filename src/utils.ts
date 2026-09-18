@@ -1,3 +1,5 @@
+import type { PomodoroSession } from './types';
+
 export function formatTimerDisplay(ms: number): string {
 	const totalSeconds = Math.floor(ms / 1000);
 	const hours = Math.floor(totalSeconds / 3600);
@@ -39,6 +41,10 @@ export function formatLocalDate(date: Date | number): string {
 	const m = String(d.getMonth() + 1).padStart(2, '0');
 	const day = String(d.getDate()).padStart(2, '0');
 	return `${y}-${m}-${day}`;
+}
+
+export function getSessionDateKey(session: Pick<PomodoroSession, 'dateKey' | 'startTime'>): string {
+	return session.dateKey ?? formatLocalDate(session.startTime);
 }
 
 export function rollingYearWindow(year: number, today = new Date()): { start: Date; end: Date } {

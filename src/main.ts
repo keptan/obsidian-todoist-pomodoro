@@ -14,8 +14,9 @@ import { TimerEngine } from './timer';
 import { TimerView, TIMER_VIEW_TYPE } from './view';
 import { renderHeatmap } from './heatmap';
 import { formatLocalDate, rollingYearWindow } from './utils';
-import { DateRange, getUncoveredDateRanges, mergeDateRanges, SerializedSaveQueue } from './persistence';
+import { DateRange, getDateRangesToSync, mergeDateRanges, SerializedSaveQueue } from './persistence';
 import { removeTaskTree } from './task-cache';
+import { parseCompletionSyncRecord, parseSessionSyncRecord } from './sync-records';
 
 export default class MikumodoroTimerPlugin extends Plugin {
 	settings!: MikumodoroSettings;
@@ -33,6 +34,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private saveTimer: number | null = null;
 	private saveQueue = new SerializedSaveQueue();
 	private dateRolloverTimer: number | null = null;
+	private seenSessionRecordFiles = new Set<string>();
+	private seenCompletionRecordFiles = new Set<string>();
+	private lastRecentCompletionSyncAt = 0;
 
 	private scheduleSave(delayMs = 2000) {
 		if (this.saveTimer !== null) return;
@@ -42,16 +46,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				console.error('Mikumodoro: Scheduled save failed', err);
 			});
 		}, delayMs);
-	}
-
-	private startPeriodicSave() {
-		// Save every 60s while timer is active
-		return this.registerInterval(window.setInterval(() => {
-			const state = this.timerEngine.getState();
-			if (state.mode === 'working' || state.mode === 'break' || state.mode === 'paused') {
-				this.scheduleSave(0);
-			}
-		}, 60 * 1000));
 	}
 
 	async onload() {
@@ -84,20 +78,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			this.completionHistoryCoverage = mergeDateRanges(savedData.completionHistoryCoverage);
 		}
 
-		// Merge any pending files from other devices (sync-safe transport)
-		if (await this.mergePendingFiles()) {
+		// Merge immutable sync records from this and other devices.
+		if (await this.mergeSyncRecords()) {
 			this.scheduleSave(1000);
 		}
 
-		// Save on state changes (start, pause, resume, stop, session complete)
-		this.timerEngine.onStateChange(() => {
-			this.scheduleSave();
-		});
-
 		// Save sessions when one completes
 		this.timerEngine.setOnSessionComplete((session) => {
-			void this.writePendingSession(session).catch(err => console.error('Mikumodoro: Failed to write pending session file', err));
-			void this.savePluginData().catch(err => {
+			void this.persistSession(session).catch(err => {
 				console.error('Mikumodoro: Failed to save completed session', err);
 			});
 			this.refreshHeatmaps();
@@ -213,9 +201,6 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		}, 5 * 60 * 1000));
 
-		// Periodic save while timer is active
-		this.startPeriodicSave();
-
 		// Periodic data reload from disk (only refresh views if data changed)
 		this.registerInterval(window.setInterval(() => {
 			void this.reloadFromDisk();
@@ -288,7 +273,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		});
 	}
 
-	// --- Pending files: sync-safe transport for cross-device data ---
+	// --- Immutable records: conflict-safe transport for cross-device data ---
 
 	private async ensureDir(dirPath: string): Promise<void> {
 		const parts = dirPath.split('/');
@@ -305,55 +290,70 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 	}
 
-	private async writePendingSession(session: PomodoroSession): Promise<void> {
+	private async writeSessionRecord(session: PomodoroSession): Promise<void> {
 		const dir = `${this.manifest.dir}/pending/sessions`;
 		await this.ensureDir(dir);
 		const filePath = `${dir}/${session.id}.json`;
 		await this.app.vault.adapter.write(filePath, JSON.stringify(session));
+		this.seenSessionRecordFiles.add(filePath);
 	}
 
-	private async writePendingCompletion(dateStr: string, record: CompletionRecord): Promise<void> {
+	private async persistSession(session: PomodoroSession): Promise<void> {
+		try {
+			await this.writeSessionRecord(session);
+		} catch (err) {
+			console.error('Mikumodoro: Failed to write session sync record', err);
+		}
+		await this.savePluginData();
+	}
+
+	private async writeCompletionRecord(dateStr: string, record: CompletionRecord): Promise<void> {
 		const dir = `${this.manifest.dir}/pending/completions`;
 		await this.ensureDir(dir);
 		const filePath = `${dir}/${record.taskId}-${record.timestamp}.json`;
 		const payload = { dateStr, ...record };
 		await this.app.vault.adapter.write(filePath, JSON.stringify(payload));
+		this.seenCompletionRecordFiles.add(filePath);
 	}
 
-	private async mergePendingFiles(): Promise<boolean> {
+	private async mergeSyncRecords(): Promise<boolean> {
 		let changed = false;
 		const sessionsDir = `${this.manifest.dir}/pending/sessions`;
 		const completionsDir = `${this.manifest.dir}/pending/completions`;
 
-		// Merge pending sessions
+		// Records stay on disk so every device can eventually receive them.
 		try {
 			if (await this.app.vault.adapter.exists(sessionsDir)) {
 				const listing = await this.app.vault.adapter.list(sessionsDir);
 				for (const file of listing.files) {
+					if (this.seenSessionRecordFiles.has(file)) continue;
 					try {
 						const content = await this.app.vault.adapter.read(file);
-						const session = JSON.parse(content) as PomodoroSession;
+						const session = parseSessionSyncRecord(content);
 						changed = this.timerEngine.mergeSessions([session]) || changed;
-						await this.app.vault.adapter.remove(file);
+						if (session.taskId.startsWith('custom:') && !this.customActivityLabels.includes(session.taskContent)) {
+							this.customActivityLabels.push(session.taskContent);
+							changed = true;
+						}
+						this.seenSessionRecordFiles.add(file);
 					} catch (err) {
-						console.error('Mikumodoro: Failed to merge pending session file', file, err);
-						// Delete corrupt file to prevent infinite retry loop
-						try { await this.app.vault.adapter.remove(file); } catch { /* already removed */ }
+						console.error('Mikumodoro: Failed to merge session sync record', file, err);
 					}
 				}
 			}
 		} catch (err) {
-			console.error('Mikumodoro: Failed to merge pending sessions', err);
+			console.error('Mikumodoro: Failed to merge session sync records', err);
 		}
 
-		// Merge pending completions
+		// Merge completion records using the same durable policy.
 		try {
 			if (await this.app.vault.adapter.exists(completionsDir)) {
 				const listing = await this.app.vault.adapter.list(completionsDir);
 				for (const file of listing.files) {
+					if (this.seenCompletionRecordFiles.has(file)) continue;
 					try {
 						const content = await this.app.vault.adapter.read(file);
-						const data = JSON.parse(content) as { dateStr: string } & CompletionRecord;
+						const data = parseCompletionSyncRecord(content);
 						const dateStr: string = data.dateStr;
 						const record: CompletionRecord = {
 							taskId: data.taskId,
@@ -368,15 +368,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 							this.completionMap[dateStr].push(record);
 							changed = true;
 						}
-						await this.app.vault.adapter.remove(file);
+						this.seenCompletionRecordFiles.add(file);
 					} catch (err) {
-						console.error('Mikumodoro: Failed to merge pending completion file', file, err);
-						try { await this.app.vault.adapter.remove(file); } catch { /* already removed */ }
+						console.error('Mikumodoro: Failed to merge completion sync record', file, err);
 					}
 				}
 			}
 		} catch (err) {
-			console.error('Mikumodoro: Failed to merge pending completions', err);
+			console.error('Mikumodoro: Failed to merge completion sync records', err);
 		}
 
 		return changed;
@@ -479,7 +478,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				timestamp: Date.now(),
 			};
 			this.completionMap[dateStr].push(completionRecord);
-			await this.writePendingCompletion(dateStr, completionRecord);
+			await this.writeCompletionRecord(dateStr, completionRecord);
 			await this.savePluginData();
 			new Notice(`Completed: ${task.content}`);
 			// Todoist closes a parent task's descendants too. Remove the full tree
@@ -518,18 +517,33 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 
 		const requested = { start: formatLocalDate(start), end: formatLocalDate(end) };
-		const uncovered = getUncoveredDateRanges(requested, this.completionHistoryCoverage);
-		if (uncovered.length === 0) return false;
+		const recentStart = new Date();
+		recentStart.setHours(0, 0, 0, 0);
+		recentStart.setDate(recentStart.getDate() - 2);
+		const shouldRefreshRecent = Date.now() - this.lastRecentCompletionSyncAt >= 5 * 60 * 1000;
+		const refreshFrom = shouldRefreshRecent ? formatLocalDate(recentStart) : undefined;
+		const rangesToSync = getDateRangesToSync(
+			requested,
+			this.completionHistoryCoverage,
+			refreshFrom,
+		);
+		if (rangesToSync.length === 0) return false;
 		const load = (async () => {
 			let changed = false;
-			for (const range of uncovered) {
+			const previousCoverage = JSON.stringify(this.completionHistoryCoverage);
+			for (const range of rangesToSync) {
 				changed = await this.syncCompletedHistoryRange(
 					new Date(`${range.start}T00:00:00`),
 					new Date(`${range.end}T00:00:00`),
 				) || changed;
 				this.completionHistoryCoverage = mergeDateRanges([...this.completionHistoryCoverage, range]);
 			}
-			await this.savePluginData();
+			if (refreshFrom && refreshFrom < requested.end) {
+				this.lastRecentCompletionSyncAt = Date.now();
+			}
+			if (changed || JSON.stringify(this.completionHistoryCoverage) !== previousCoverage) {
+				await this.savePluginData();
+			}
 			return changed;
 		})();
 		this.completionHistoryLoads.set(key, load);
@@ -610,13 +624,13 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			endTime: date.getTime() + durationMinutes * 60000,
 			durationMinutes,
 			completed: false,
+			dateKey: formatLocalDate(date),
 		};
-		this.timerEngine.addManualSession(session);
+		this.timerEngine.mergeSessions([session]);
 		if (!this.customActivityLabels.includes(label)) {
 			this.customActivityLabels.push(label);
 		}
-		await this.writePendingSession(session).catch(err => console.error('Mikumodoro: Failed to write pending session file', err));
-		await this.savePluginData();
+		await this.persistSession(session);
 		this.refreshHeatmaps();
 		this.refreshViews();
 	}
@@ -795,22 +809,28 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	async reloadFromDisk() {
 		// Bypass Obsidian's loadData() cache to see changes from Obsidian Sync
-		let rawData: string;
+		let rawData = '';
 		try {
 			const dataPath = `${this.manifest.dir}/data.json`;
-			if (!(await this.app.vault.adapter.exists(dataPath))) return;
-			rawData = await this.app.vault.adapter.read(dataPath);
+			if (await this.app.vault.adapter.exists(dataPath)) {
+				rawData = await this.app.vault.adapter.read(dataPath);
+			}
 		} catch (err) {
 			console.error('Mikumodoro: Failed to read data.json from disk', err);
-			return;
 		}
-		const data = (rawData ? JSON.parse(rawData) : {}) as {
+		let data: {
 			sessions?: PomodoroSession[];
 			completions?: CompletionMap;
 			taskNotes?: TaskNoteMap;
 			customActivityLabels?: string[];
 			completionHistoryCoverage?: DateRange[];
 		};
+		try {
+			data = (rawData ? JSON.parse(rawData) : {}) as typeof data;
+		} catch (err) {
+			console.error('Mikumodoro: Failed to parse data.json', err);
+			data = {};
+		}
 		if (!data) return;
 		let changed = false;
 
@@ -879,8 +899,8 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		}
 
-		// Also merge any pending files synced from other devices
-		if (await this.mergePendingFiles()) {
+		// Also merge immutable records synced from other devices.
+		if (await this.mergeSyncRecords()) {
 			changed = true;
 		}
 

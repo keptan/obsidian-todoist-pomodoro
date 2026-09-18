@@ -42,7 +42,7 @@ To add a heatmap to a note, use:
 
 ## Privacy
 
-Todoist Pomodoro Heatmap has no telemetry. It connects directly to Todoist only after you provide an API token. Your token, settings, sessions, task links, and completion history are stored in the plugin's local `data.json`. Vault-sync services may copy that file to your other devices.
+Todoist Pomodoro Heatmap has no telemetry. It connects directly to Todoist only after you provide an API token. Your token, settings, sessions, task links, and completion history are stored in the plugin folder. Sessions and completions also use small, immutable records so vault-sync services can merge activity from multiple devices without relying on a single shared `data.json` write.
 
 ## Development
 
