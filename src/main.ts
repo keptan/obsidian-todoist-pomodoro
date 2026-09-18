@@ -17,6 +17,7 @@ import { formatLocalDate, rollingYearWindow } from './utils';
 import { DateRange, getDateRangesToSync, mergeDateRanges, SerializedSaveQueue } from './persistence';
 import { removeTaskTree } from './task-cache';
 import { parseCompletionSyncRecord, parseSessionSyncRecord } from './sync-records';
+import { reorderTaskIds, TaskDropPlacement, updateStoredTaskOrder } from './task-order';
 
 export default class MikumodoroTimerPlugin extends Plugin {
 	settings!: MikumodoroSettings;
@@ -30,6 +31,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private completionHistoryCoverage: DateRange[] = [];
 	private completionHistoryLoads = new Map<string, Promise<boolean>>();
 	private customActivityLabels: string[] = [];
+	private taskOrder: string[] = [];
 	private heatmapElements: Set<HTMLElement> = new Set();
 	private saveTimer: number | null = null;
 	private saveQueue = new SerializedSaveQueue();
@@ -60,6 +62,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			taskNotes?: TaskNoteMap;
 			completions?: CompletionMap;
 			customActivityLabels?: string[];
+			taskOrder?: string[];
 			completionHistoryCoverage?: DateRange[];
 		};
 		if (savedData?.sessions) {
@@ -73,6 +76,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 		if (savedData?.customActivityLabels) {
 			this.customActivityLabels = savedData.customActivityLabels;
+		}
+		if (Array.isArray(savedData?.taskOrder)) {
+			this.taskOrder = [...new Set(savedData.taskOrder.filter(id => typeof id === 'string'))];
 		}
 		if (Array.isArray(savedData?.completionHistoryCoverage)) {
 			this.completionHistoryCoverage = mergeDateRanges(savedData.completionHistoryCoverage);
@@ -268,6 +274,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				taskNotes: this.taskNoteMap,
 				completions: this.completionMap,
 				customActivityLabels: this.customActivityLabels,
+				taskOrder: this.taskOrder,
 				completionHistoryCoverage: this.completionHistoryCoverage,
 			});
 		});
@@ -403,6 +410,32 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	getCachedTasks(): TodoistTask[] {
 		return this.cachedTasks;
+	}
+
+	getTaskOrder(): string[] {
+		return this.taskOrder;
+	}
+
+	async reorderTaskInView(
+		siblingIds: string[],
+		draggedId: string,
+		targetId: string,
+		placement: TaskDropPlacement,
+	): Promise<boolean> {
+		const reorderedIds = reorderTaskIds(siblingIds, draggedId, targetId, placement);
+		if (reorderedIds.every((id, index) => id === siblingIds[index])) return false;
+
+		const previousOrder = this.taskOrder;
+		this.taskOrder = updateStoredTaskOrder(this.taskOrder, reorderedIds);
+		this.refreshViews();
+		try {
+			await this.savePluginData();
+			return true;
+		} catch (err) {
+			this.taskOrder = previousOrder;
+			this.refreshViews();
+			throw err;
+		}
 	}
 
 	getSelectedTask(): TodoistTask | null {
@@ -823,6 +856,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			completions?: CompletionMap;
 			taskNotes?: TaskNoteMap;
 			customActivityLabels?: string[];
+			taskOrder?: string[];
 			completionHistoryCoverage?: DateRange[];
 		};
 		try {
@@ -885,6 +919,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 					this.customActivityLabels.push(label);
 					changed = true;
 				}
+			}
+		}
+
+		if (Array.isArray(data.taskOrder)) {
+			const diskOrder = [...new Set(data.taskOrder.filter(id => typeof id === 'string'))];
+			if (JSON.stringify(diskOrder) !== JSON.stringify(this.taskOrder)) {
+				this.taskOrder = diskOrder;
+				changed = true;
 			}
 		}
 

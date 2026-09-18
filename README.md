@@ -6,6 +6,7 @@ An Obsidian Pomodoro timer with Todoist tasks and a contribution heatmap.
 
 - Work for as long as you want, then take a break based on the time you worked.
 - Browse, create, select, and complete Todoist tasks without leaving Obsidian.
+- Drag tasks into your preferred order in the Obsidian task list.
 - Group tasks by project, display subtasks, and link tasks to notes.
 - Track sessions in year and month heatmaps.
 - Add time manually and import completed-task history from Todoist.

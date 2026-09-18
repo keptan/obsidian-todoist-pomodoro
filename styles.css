@@ -199,6 +199,37 @@
 	font-weight: 500;
 }
 
+.mikumodoro-task-drag-handle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	flex-shrink: 0;
+	cursor: grab;
+	color: var(--text-faint);
+	font-size: 0.8em;
+	user-select: none;
+	touch-action: none;
+}
+
+.mikumodoro-task-drag-handle:hover,
+.mikumodoro-task-drag-handle:focus-visible {
+	color: var(--text-muted);
+	outline: none;
+}
+
+.mikumodoro-task-item.is-dragging {
+	opacity: 0.45;
+}
+
+.mikumodoro-task-item.drop-before {
+	box-shadow: inset 0 2px 0 var(--interactive-accent);
+}
+
+.mikumodoro-task-item.drop-after {
+	box-shadow: inset 0 -2px 0 var(--interactive-accent);
+}
+
 .mikumodoro-task-arrow {
 	cursor: pointer;
 	width: 16px;

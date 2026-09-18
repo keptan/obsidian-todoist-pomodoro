@@ -2,6 +2,7 @@ import { ItemView, WorkspaceLeaf, Notice, Modal, setIcon } from 'obsidian';
 import type MikumodoroTimerPlugin from './main';
 import type { TodoistTask, TimerState } from './types';
 import { formatTimerDisplay, formatLocalDate, formatMinutes, getSessionDateKey } from './utils';
+import { sortTasksByViewOrder, TaskDropPlacement } from './task-order';
 
 export const TIMER_VIEW_TYPE = 'obsidian-todoist-pomodoro-view';
 
@@ -16,6 +17,9 @@ export class TimerView extends ItemView {
 	private lastBreakExtended: boolean = false;
 	private removeTimerStateListener: (() => void) | null = null;
 	private resizeCleanups: Array<() => void> = [];
+	private draggedTaskId: string | null = null;
+	private dropTargetTaskId: string | null = null;
+	private dropPlacement: TaskDropPlacement = 'before';
 
 	constructor(leaf: WorkspaceLeaf, plugin: MikumodoroTimerPlugin) {
 		super(leaf);
@@ -111,6 +115,7 @@ export class TimerView extends ItemView {
 			]),
 		);
 		this.cleanupResizeHandlers();
+		this.clearTaskDragState();
 		containerEl.empty();
 		this.lastRenderDate = formatLocalDate(new Date());
 
@@ -382,9 +387,10 @@ export class TimerView extends ItemView {
 				projectArrow.setText('▸');
 			}
 
-			const sortedTasks = sortTasks(topLevelTasks);
-			for (const task of sortedTasks.slice(0, 50)) {
-				this.renderTaskItem(projectContent, task, group.tasks, 0);
+			const sortedTasks = sortTasksByViewOrder(topLevelTasks, this.plugin.getTaskOrder());
+			const visibleTasks = sortedTasks.slice(0, 50);
+			for (const task of visibleTasks) {
+				this.renderTaskItem(projectContent, task, group.tasks, 0, visibleTasks);
 			}
 
 			projectHeader.addEventListener('click', () => {
@@ -402,9 +408,9 @@ export class TimerView extends ItemView {
 		}
 
 		// Render standalone top-level tasks as tasks, not project-like containers.
-		const sortedStandalone = sortTasks(standaloneTasks);
+		const sortedStandalone = sortTasksByViewOrder(standaloneTasks, this.plugin.getTaskOrder());
 		for (const task of sortedStandalone) {
-			this.renderTaskItem(listEl, task, tasks, 0);
+			this.renderTaskItem(listEl, task, tasks, 0, sortedStandalone);
 		}
 	}
 
@@ -414,6 +420,130 @@ export class TimerView extends ItemView {
 			this.expandedTasks.add(current.parent_id);
 			current = allTasks.find(t => t.id === current!.parent_id);
 		}
+	}
+
+	private clearTaskDragState() {
+		this.draggedTaskId = null;
+		this.dropTargetTaskId = null;
+		this.containerEl.querySelectorAll('.is-dragging, .drop-before, .drop-after').forEach(element => {
+			element.classList.remove('is-dragging', 'drop-before', 'drop-after');
+		});
+	}
+
+	private showTaskDropTarget(item: HTMLElement, placement: TaskDropPlacement) {
+		this.containerEl.querySelectorAll('.drop-before, .drop-after').forEach(element => {
+			element.classList.remove('drop-before', 'drop-after');
+		});
+		item.classList.add(placement === 'before' ? 'drop-before' : 'drop-after');
+	}
+
+	private commitTaskReorder(
+		siblingIds: string[],
+		draggedId: string,
+		targetId: string,
+		placement: TaskDropPlacement,
+	) {
+		this.clearTaskDragState();
+		void this.plugin.reorderTaskInView(siblingIds, draggedId, targetId, placement).catch(err => {
+			console.error('Mikumodoro: Failed to save task order', err);
+			new Notice('Failed to save task order');
+		});
+	}
+
+	private bindTaskReordering(
+		dragHandle: HTMLElement,
+		item: HTMLElement,
+		task: TodoistTask,
+		siblings: TodoistTask[],
+	) {
+		const siblingIds = siblings.map(sibling => sibling.id);
+		const canDrop = (draggedId: string | null) =>
+			draggedId !== null && draggedId !== task.id && siblingIds.includes(draggedId);
+		const placementAt = (clientY: number): TaskDropPlacement => {
+			const bounds = item.getBoundingClientRect();
+			return clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+		};
+		const updateDropTarget = (clientY: number) => {
+			if (!canDrop(this.draggedTaskId)) return false;
+			this.dropTargetTaskId = task.id;
+			this.dropPlacement = placementAt(clientY);
+			this.showTaskDropTarget(item, this.dropPlacement);
+			return true;
+		};
+
+		dragHandle.draggable = true;
+		dragHandle.addEventListener('click', event => event.stopPropagation());
+		dragHandle.addEventListener('dragstart', event => {
+			event.stopPropagation();
+			this.draggedTaskId = task.id;
+			item.classList.add('is-dragging');
+			if (event.dataTransfer) {
+				event.dataTransfer.effectAllowed = 'move';
+				event.dataTransfer.setData('text/plain', task.id);
+			}
+		});
+		dragHandle.addEventListener('dragend', () => this.clearTaskDragState());
+
+		item.addEventListener('dragover', event => {
+			if (!updateDropTarget(event.clientY)) return;
+			event.preventDefault();
+			if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+		});
+		item.addEventListener('drop', event => {
+			if (!updateDropTarget(event.clientY) || !this.draggedTaskId) return;
+			event.preventDefault();
+			event.stopPropagation();
+			this.commitTaskReorder(siblingIds, this.draggedTaskId, task.id, this.dropPlacement);
+		});
+
+		dragHandle.addEventListener('keydown', event => {
+			if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+			const currentIndex = siblingIds.indexOf(task.id);
+			const targetIndex = currentIndex + (event.key === 'ArrowUp' ? -1 : 1);
+			const targetId = siblingIds[targetIndex];
+			if (!targetId) return;
+			event.preventDefault();
+			event.stopPropagation();
+			this.commitTaskReorder(
+				siblingIds,
+				task.id,
+				targetId,
+				event.key === 'ArrowUp' ? 'before' : 'after',
+			);
+		});
+
+		// Native HTML drag events do not consistently fire on touch devices.
+		dragHandle.addEventListener('pointerdown', event => {
+			if (event.pointerType === 'mouse') return;
+			event.preventDefault();
+			event.stopPropagation();
+			this.draggedTaskId = task.id;
+			item.classList.add('is-dragging');
+			dragHandle.setPointerCapture(event.pointerId);
+		});
+		dragHandle.addEventListener('pointermove', event => {
+			if (event.pointerType === 'mouse' || this.draggedTaskId !== task.id) return;
+			event.preventDefault();
+			const targetItem = document
+				.elementFromPoint(event.clientX, event.clientY)
+				?.closest<HTMLElement>('.mikumodoro-task-item');
+			const targetId = targetItem?.dataset.taskId;
+			if (!targetItem || !targetId || targetId === task.id || !siblingIds.includes(targetId)) return;
+			this.dropTargetTaskId = targetId;
+			const bounds = targetItem.getBoundingClientRect();
+			this.dropPlacement = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+			this.showTaskDropTarget(targetItem, this.dropPlacement);
+		});
+		dragHandle.addEventListener('pointerup', event => {
+			if (event.pointerType === 'mouse' || this.draggedTaskId !== task.id) return;
+			event.preventDefault();
+			if (this.dropTargetTaskId) {
+				this.commitTaskReorder(siblingIds, task.id, this.dropTargetTaskId, this.dropPlacement);
+			} else {
+				this.clearTaskDragState();
+			}
+		});
+		dragHandle.addEventListener('pointercancel', () => this.clearTaskDragState());
 	}
 
 	private openTaskCreator(projectName: string, allTasks: TodoistTask[]) {
@@ -477,6 +607,7 @@ export class TimerView extends ItemView {
 		task: TodoistTask,
 		allTasks: TodoistTask[],
 		depth: number,
+		siblings: TodoistTask[],
 	) {
 		const selected = this.plugin.getSelectedTask();
 		const isSelected = selected?.id === task.id;
@@ -489,7 +620,22 @@ export class TimerView extends ItemView {
 
 		// Task row
 		const item = wrapper.createDiv({ cls: 'mikumodoro-task-item' });
+		item.dataset.taskId = task.id;
 		if (isSelected) item.classList.add('selected');
+
+		if (siblings.length > 1) {
+			const dragHandle = item.createSpan({
+				cls: 'mikumodoro-task-drag-handle',
+				text: '⠿',
+				attr: {
+					'aria-label': `Reorder ${task.content}`,
+					'role': 'button',
+					'tabindex': '0',
+					'title': 'Drag to reorder',
+				},
+			});
+			this.bindTaskReordering(dragHandle, item, task, siblings);
+		}
 
 		// Only parents need an expand arrow. This is recalculated from the
 		// refreshed task list on every render, including after adding a subtask.
@@ -582,8 +728,9 @@ export class TimerView extends ItemView {
 		const updateSubtaskDisplay = () => {
 			subtaskContainer.empty();
 			if (!this.expandedTasks.has(task.id)) return;
-			for (const sub of sortTasks(subtasks)) {
-				this.renderTaskItem(subtaskContainer, sub, allTasks, depth + 1);
+			const sortedSubtasks = sortTasksByViewOrder(subtasks, this.plugin.getTaskOrder());
+			for (const sub of sortedSubtasks) {
+				this.renderTaskItem(subtaskContainer, sub, allTasks, depth + 1, sortedSubtasks);
 			}
 		};
 
@@ -1231,22 +1378,6 @@ export class TimerView extends ItemView {
 		for (const cleanup of this.resizeCleanups) cleanup();
 		this.resizeCleanups = [];
 	}
-}
-
-function sortTasks(tasks: TodoistTask[]): TodoistTask[] {
-	return [...tasks].sort((a, b) => {
-		const pa = a.priority ?? 1;
-		const pb = b.priority ?? 1;
-		if (pb !== pa) return pb - pa;
-		const da = a.due?.date ?? '';
-		const db = b.due?.date ?? '';
-		if (da !== db) {
-			if (!da) return 1;
-			if (!db) return -1;
-			return da.localeCompare(db);
-		}
-		return a.content.localeCompare(b.content);
-	});
 }
 
 function formatTaskTime(minutes: number): string {
