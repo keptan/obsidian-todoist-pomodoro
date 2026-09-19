@@ -38,14 +38,16 @@ assert.equal(lines[6], '  and 1 more');
 assert.doesNotMatch(tooltip, /smallest: 5m/);
 
 assert.equal(getWeightedReps(30, 5), 45);
+assert.equal(getWeightedReps(30, 5, 4), 57);
 const workoutMap = buildWorkoutMap([
-	{ id: 'one', dateKey: '2026-08-12', timestamp: 1, pushUps: 30, pullUps: 5 },
+	{ id: 'one', dateKey: '2026-08-12', timestamp: 1, pushUps: 30, pullUps: 5, dips: 4 },
 	{ id: 'two', dateKey: '2026-08-12', timestamp: 2, pushUps: 10, pullUps: 2 },
 ]);
 assert.deepEqual(workoutMap.get('2026-08-12'), {
 	pushUps: 40,
 	pullUps: 7,
-	weightedReps: 61,
+	dips: 4,
+	weightedReps: 73,
 });
 
 const workoutTooltip = buildTooltip(
@@ -56,14 +58,15 @@ const workoutTooltip = buildTooltip(
 	false,
 	[],
 	new Map([['2026-08-12', taskEntries]]),
-	{ pushUps: 40, pullUps: 7, weightedReps: 61 },
+	{ pushUps: 40, pullUps: 7, dips: 4, weightedReps: 73 },
 );
 const workoutLines = workoutTooltip.split('\n');
-assert.deepEqual(workoutLines.slice(0, 4), [
+assert.deepEqual(workoutLines.slice(0, 5), [
 	'Aug 12',
 	'  Worked: 2h 34m total',
 	'  Push-ups: 40',
 	'  Pull-ups: 7',
+	'  Dips: 4',
 ]);
 
 const completionTooltip = buildTooltip(
@@ -78,8 +81,8 @@ const completionTooltip = buildTooltip(
 assert.match(completionTooltip, /3 Todoist tasks completed/);
 
 const selection = summarizeSelectedDays([
-	{ minutes: 54, completions: 2, pushUps: 20, pullUps: 3, tasks: [{ taskContent: 'Writing', minutes: 54 }] },
-	{ minutes: 30, completions: 1, pushUps: 15, pullUps: 2, tasks: [{ taskContent: 'Math', minutes: 30 }] },
+	{ minutes: 54, completions: 2, pushUps: 20, pullUps: 3, dips: 4, tasks: [{ taskContent: 'Writing', minutes: 54 }] },
+	{ minutes: 30, completions: 1, pushUps: 15, pullUps: 2, dips: 6, tasks: [{ taskContent: 'Math', minutes: 30 }] },
 	{ minutes: 0, completions: 0, tasks: [] },
 	{ minutes: 25, completions: 3, pushUps: 10, pullUps: 0, tasks: [{ taskContent: 'Writing', minutes: 25 }] },
 ]);
@@ -88,11 +91,12 @@ assert.equal(selection.averageMinutes, 27);
 assert.equal(selection.completions, 6);
 assert.equal(selection.pushUps, 45);
 assert.equal(selection.pullUps, 5);
+assert.equal(selection.dips, 10);
 assert.deepEqual(selection.tasks, [
 	{ taskContent: 'Writing', minutes: 79 },
 	{ taskContent: 'Math', minutes: 30 },
 ]);
 assert.equal(
 	formatSelectionSummary(selection),
-	'1h 49m total · 27m/day\nPush-ups: 45\nPull-ups: 5\nWriting: 1h 19m\nMath: 30m\n6 Todoist tasks completed',
+	'1h 49m total · 27m/day\nPush-ups: 45\nPull-ups: 5\nDips: 10\nWriting: 1h 19m\nMath: 30m\n6 Todoist tasks completed',
 );

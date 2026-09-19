@@ -1185,6 +1185,7 @@ export class TimerView extends ItemView {
 	private createWorkoutFields(container: HTMLElement): {
 		pushUpsInput: HTMLInputElement;
 		pullUpsInput: HTMLInputElement;
+		dipsInput: HTMLInputElement;
 	} {
 		const workoutArea = container.createDiv({ cls: 'mikumodoro-log-workout-area' });
 		workoutArea.createEl('label', { text: 'Workout', cls: 'mikumodoro-log-label' });
@@ -1206,13 +1207,22 @@ export class TimerView extends ItemView {
 		});
 		pullUpsInput.value = '0';
 
-		return { pushUpsInput, pullUpsInput };
+		const dipsLabel = fields.createEl('label', { cls: 'mikumodoro-log-workout-field' });
+		dipsLabel.createSpan({ text: 'Dips' });
+		const dipsInput = dipsLabel.createEl('input', {
+			type: 'number',
+			attr: { min: '0', step: '1', inputmode: 'numeric' },
+		});
+		dipsInput.value = '0';
+
+		return { pushUpsInput, pullUpsInput, dipsInput };
 	}
 
-	private readWorkoutFields(pushUpsInput: HTMLInputElement, pullUpsInput: HTMLInputElement) {
+	private readWorkoutFields(pushUpsInput: HTMLInputElement, pullUpsInput: HTMLInputElement, dipsInput: HTMLInputElement) {
 		return {
 			pushUps: Math.max(0, parseInt(pushUpsInput.value) || 0),
 			pullUps: Math.max(0, parseInt(pullUpsInput.value) || 0),
+			dips: Math.max(0, parseInt(dipsInput.value) || 0),
 		};
 	}
 
@@ -1223,24 +1233,25 @@ export class TimerView extends ItemView {
 			text: 'Log your reps to double this break.',
 			cls: 'mikumodoro-modal-desc',
 		});
-		const { pushUpsInput, pullUpsInput } = this.createWorkoutFields(modal.contentEl);
+		const { pushUpsInput, pullUpsInput, dipsInput } = this.createWorkoutFields(modal.contentEl);
 		const submitBtn = modal.contentEl.createEl('button', {
 			cls: 'mikumodoro-btn mikumodoro-btn-primary',
 			text: 'Log and double break',
 		});
 		const submit = async () => {
-			const { pushUps, pullUps } = this.readWorkoutFields(pushUpsInput, pullUpsInput);
-			if (pushUps + pullUps === 0) {
-				new Notice('Enter push-ups or pull-ups');
+			const { pushUps, pullUps, dips } = this.readWorkoutFields(pushUpsInput, pullUpsInput, dipsInput);
+			if (pushUps + pullUps + dips === 0) {
+				new Notice('Enter push-ups, pull-ups, or dips');
 				return;
 			}
 			submitBtn.disabled = true;
 			try {
-				await this.plugin.addManualLog('', 0, new Date(), pushUps, pullUps);
+				await this.plugin.addManualLog('', 0, new Date(), pushUps, pullUps, dips);
 				this.plugin.timerEngine.extendBreak(2);
 				const logged = [
 					pushUps > 0 ? `${pushUps} push-ups` : '',
 					pullUps > 0 ? `${pullUps} pull-ups` : '',
+					dips > 0 ? `${dips} dips` : '',
 				].filter(Boolean);
 				new Notice(`Logged ${logged.join(' · ')}`);
 				modal.close();
@@ -1251,7 +1262,7 @@ export class TimerView extends ItemView {
 			}
 		};
 		submitBtn.addEventListener('click', () => void submit());
-		for (const input of [pushUpsInput, pullUpsInput]) {
+		for (const input of [pushUpsInput, pullUpsInput, dipsInput]) {
 			input.addEventListener('keydown', event => {
 				if (event.key === 'Enter') void submit();
 			});
@@ -1324,8 +1335,9 @@ export class TimerView extends ItemView {
 
 		let pushUpsInput: HTMLInputElement | null = null;
 		let pullUpsInput: HTMLInputElement | null = null;
+		let dipsInput: HTMLInputElement | null = null;
 		if (this.plugin.settings.workoutTrackingEnabled) {
-			({ pushUpsInput, pullUpsInput } = this.createWorkoutFields(modal.contentEl));
+			({ pushUpsInput, pullUpsInput, dipsInput } = this.createWorkoutFields(modal.contentEl));
 		}
 
 		const currentTimeArea = modal.contentEl.createEl('label', { cls: 'mikumodoro-log-current-time' });
@@ -1351,10 +1363,10 @@ export class TimerView extends ItemView {
 		});
 		addBtn.addEventListener('click', () => void (async () => {
 			const label = inputEl.value.trim();
-			const { pushUps, pullUps } = pushUpsInput && pullUpsInput
-				? this.readWorkoutFields(pushUpsInput, pullUpsInput)
-				: { pushUps: 0, pullUps: 0 };
-			if (!label && pushUps + pullUps === 0) {
+			const { pushUps, pullUps, dips } = pushUpsInput && pullUpsInput && dipsInput
+				? this.readWorkoutFields(pushUpsInput, pullUpsInput, dipsInput)
+				: { pushUps: 0, pullUps: 0, dips: 0 };
+			if (!label && pushUps + pullUps + dips === 0) {
 				new Notice(this.plugin.settings.workoutTrackingEnabled
 					? 'Enter an activity or workout reps'
 					: 'Enter an activity');
@@ -1363,11 +1375,12 @@ export class TimerView extends ItemView {
 			const minutes = parseInt(slider.value);
 			const dateStr = dateInput.value || todayStr;
 			const sessionDate = currentTimeInput.checked ? new Date() : new Date(dateStr + 'T12:00:00');
-			await this.plugin.addManualLog(label, minutes, sessionDate, pushUps, pullUps);
+			await this.plugin.addManualLog(label, minutes, sessionDate, pushUps, pullUps, dips);
 			const logged: string[] = [];
 			if (label) logged.push(`${minutes}m for "${label}"`);
 			if (pushUps > 0) logged.push(`${pushUps} push-ups`);
 			if (pullUps > 0) logged.push(`${pullUps} pull-ups`);
+			if (dips > 0) logged.push(`${dips} dips`);
 			new Notice(`Logged ${logged.join(' · ')}`);
 			modal.close();
 			this.render();

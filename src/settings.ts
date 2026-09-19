@@ -153,7 +153,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Workout tracking')
-			.setDesc('Add push-up and pull-up logging to the manual log window and heatmap.')
+			.setDesc('Add push-up, pull-up, and dip logging to the manual log window and heatmap.')
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.workoutTrackingEnabled)

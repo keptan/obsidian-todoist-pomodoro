@@ -692,7 +692,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		await this.savePluginData();
 	}
 
-	async addManualLog(label: string, durationMinutes: number, date: Date, pushUps: number, pullUps: number) {
+	async addManualLog(label: string, durationMinutes: number, date: Date, pushUps: number, pullUps: number, dips: number) {
 		if (label) {
 			const session: PomodoroSession = {
 				id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -715,13 +715,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		}
 
-		if (pushUps + pullUps > 0) {
+		if (pushUps + pullUps + dips > 0) {
 			const workout: WorkoutRecord = {
 				id: `workout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 				dateKey: formatLocalDate(date),
 				timestamp: date.getTime(),
 				pushUps,
 				pullUps,
+				dips,
 			};
 			this.workouts.push(workout);
 			try {

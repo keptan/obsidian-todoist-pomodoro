@@ -49,7 +49,8 @@ export function parseWorkoutSyncRecord(content: string): WorkoutRecord {
 		|| typeof value.timestamp !== 'number' || !Number.isFinite(value.timestamp)
 		|| typeof value.pushUps !== 'number' || !Number.isInteger(value.pushUps) || value.pushUps < 0
 		|| typeof value.pullUps !== 'number' || !Number.isInteger(value.pullUps) || value.pullUps < 0
-		|| value.pushUps + value.pullUps === 0
+		|| (value.dips !== undefined && (typeof value.dips !== 'number' || !Number.isInteger(value.dips) || value.dips < 0))
+		|| value.pushUps + value.pullUps + (typeof value.dips === 'number' ? value.dips : 0) === 0
 	) {
 		throw new Error('Invalid workout sync record');
 	}

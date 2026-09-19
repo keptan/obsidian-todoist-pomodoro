@@ -10,7 +10,7 @@ An Obsidian Pomodoro timer with Todoist tasks and a contribution heatmap.
 - Group tasks by project, display subtasks, and link tasks to notes.
 - Track sessions in year and month heatmaps.
 - Add time manually and import completed-task history from Todoist.
-- Optionally log push-ups and pull-ups, with workout volume shown on the heatmap.
+- Optionally log push-ups, pull-ups, and dips, with workout volume shown on the heatmap. Pull-ups and dips count as three push-ups each.
 - Optional break sounds and system notifications.
 
 ## Installation

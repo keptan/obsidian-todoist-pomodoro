@@ -15,6 +15,7 @@ interface SelectionSummary {
 	completions: number;
 	pushUps: number;
 	pullUps: number;
+	dips: number;
 	tasks: TaskMinutesEntry[];
 }
 
@@ -243,6 +244,7 @@ function renderYearView(
 				cell.dataset.selectionCompletions = String(completions);
 				cell.dataset.selectionPushUps = String(workout?.pushUps ?? 0);
 				cell.dataset.selectionPullUps = String(workout?.pullUps ?? 0);
+				cell.dataset.selectionDips = String(workout?.dips ?? 0);
 				cell.dataset.selectionTasks = JSON.stringify(dayTaskMap.get(dateStr) ?? []);
 			}
 
@@ -335,6 +337,7 @@ function renderMonthView(
 		cell.dataset.selectionCompletions = String(completions);
 		cell.dataset.selectionPushUps = String(workout?.pushUps ?? 0);
 		cell.dataset.selectionPullUps = String(workout?.pullUps ?? 0);
+		cell.dataset.selectionDips = String(workout?.dips ?? 0);
 		cell.dataset.selectionTasks = JSON.stringify(dayTaskMap.get(dateStr) ?? []);
 		cell.createSpan({ cls: 'mikumodoro-heatmap-month-day-num', text: String(day) });
 
@@ -388,6 +391,7 @@ export function buildTooltip(
 	if (workout) {
 		lines.push(`  Push-ups: ${workout.pushUps}`);
 		lines.push(`  Pull-ups: ${workout.pullUps}`);
+		lines.push(`  Dips: ${workout.dips}`);
 	}
 	if (minutes > 0) {
 		const taskEntries = dayTaskMap.get(dateStr);
@@ -479,6 +483,7 @@ export function summarizeSelectedDays(
 		completions: number;
 		pushUps?: number;
 		pullUps?: number;
+		dips?: number;
 		tasks: TaskMinutesEntry[];
 	}>,
 ): SelectionSummary {
@@ -495,6 +500,7 @@ export function summarizeSelectedDays(
 		completions: days.reduce((total, day) => total + day.completions, 0),
 		pushUps: days.reduce((total, day) => total + (day.pushUps ?? 0), 0),
 		pullUps: days.reduce((total, day) => total + (day.pullUps ?? 0), 0),
+		dips: days.reduce((total, day) => total + (day.dips ?? 0), 0),
 		tasks: Array.from(taskTotals, ([taskContent, minutes]) => ({ taskContent, minutes }))
 			.sort((a, b) => b.minutes - a.minutes),
 	};
@@ -504,9 +510,10 @@ export function formatSelectionSummary(summary: SelectionSummary): string {
 	const lines = [
 		`${formatMinutes(summary.totalMinutes)} total · ${formatMinutes(summary.averageMinutes)}/day`,
 	];
-	if (summary.pushUps > 0 || summary.pullUps > 0) {
+	if (summary.pushUps > 0 || summary.pullUps > 0 || summary.dips > 0) {
 		lines.push(`Push-ups: ${summary.pushUps}`);
 		lines.push(`Pull-ups: ${summary.pullUps}`);
+		lines.push(`Dips: ${summary.dips}`);
 	}
 	for (const task of summary.tasks.slice(0, 5)) {
 		const name = task.taskContent.length > 30 ? task.taskContent.slice(0, 30) + '...' : task.taskContent;
@@ -524,6 +531,7 @@ function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
 		completions: number;
 		pushUps: number;
 		pullUps: number;
+		dips: number;
 		tasks: TaskMinutesEntry[];
 	}
 
@@ -553,6 +561,7 @@ function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
 				completions: Number(el.dataset.selectionCompletions) || 0,
 				pushUps: Number(el.dataset.selectionPushUps) || 0,
 				pullUps: Number(el.dataset.selectionPullUps) || 0,
+				dips: Number(el.dataset.selectionDips) || 0,
 				tasks,
 			};
 		});
@@ -576,6 +585,7 @@ function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
 				completions: number;
 				pushUps: number;
 				pullUps: number;
+				dips: number;
 				tasks: TaskMinutesEntry[];
 			}> = [];
 			for (const cell of cells) {
@@ -589,6 +599,7 @@ function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
 						completions: cell.completions,
 						pushUps: cell.pushUps,
 						pullUps: cell.pullUps,
+						dips: cell.dips,
 						tasks: cell.tasks,
 					});
 				}

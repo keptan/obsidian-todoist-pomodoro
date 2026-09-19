@@ -89,10 +89,13 @@ export interface WorkoutRecord {
 	timestamp: number;
 	pushUps: number;
 	pullUps: number;
+	/** Optional for compatibility with workout records created before dips were supported. */
+	dips?: number;
 }
 
 export interface WorkoutTotals {
 	pushUps: number;
 	pullUps: number;
+	dips: number;
 	weightedReps: number;
 }
