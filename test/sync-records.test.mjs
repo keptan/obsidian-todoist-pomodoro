@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parseCompletionSyncRecord, parseSessionSyncRecord } from '../src/sync-records.ts';
+import { parseCompletionSyncRecord, parseSessionSyncRecord, parseWorkoutSyncRecord } from '../src/sync-records.ts';
 import { formatLocalDate, getSessionDateKey } from '../src/utils.ts';
 
 const session = parseSessionSyncRecord(JSON.stringify({
@@ -27,5 +27,17 @@ const completion = parseCompletionSyncRecord(JSON.stringify({
 }));
 assert.equal(completion.dateStr, '2026-09-18');
 
+const workout = parseWorkoutSyncRecord(JSON.stringify({
+	id: 'workout-device-a',
+	dateKey: '2026-09-18',
+	timestamp: Date.parse('2026-09-18T17:00:00Z'),
+	pushUps: 30,
+	pullUps: 5,
+}));
+assert.equal(workout.pushUps, 30);
+assert.equal(workout.pullUps, 5);
+
 assert.throws(() => parseSessionSyncRecord('{"id":"incomplete"}'), /Invalid session/);
 assert.throws(() => parseCompletionSyncRecord('{"dateStr":"2026-09-18"}'), /Invalid completion/);
+assert.throws(() => parseWorkoutSyncRecord('{"id":"workout","dateKey":"2026-09-18","timestamp":1,"pushUps":0,"pullUps":0}'), /Invalid workout/);
+assert.throws(() => parseWorkoutSyncRecord('{"id":"workout","dateKey":"2026-09-18","timestamp":1,"pushUps":2.5,"pullUps":0}'), /Invalid workout/);

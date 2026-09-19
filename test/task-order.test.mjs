@@ -38,3 +38,12 @@ assert.deepEqual(
 	['other-2', 'other-1', 'a', 'c', 'b'],
 	'reordering one sibling list should preserve ordering data for other lists',
 );
+
+assert.deepEqual(
+	updateStoredTaskOrder(
+		['task-a', 'project:work', 'task-b', 'project:home'],
+		reorderTaskIds(['project:work', 'project:home'], 'project:home', 'project:work', 'before'),
+	),
+	['task-a', 'task-b', 'project:home', 'project:work'],
+	'project ordering should persist without disturbing task ordering',
+);

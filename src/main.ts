@@ -7,6 +7,7 @@ import {
 	TaskNoteMap,
 	CompletionMap,
 	CompletionRecord,
+	WorkoutRecord,
 } from './types';
 import { MikumodoroSettingTab } from './settings';
 import { TodoistClient } from './todoist';
@@ -16,7 +17,7 @@ import { renderHeatmap } from './heatmap';
 import { formatLocalDate, rollingYearWindow } from './utils';
 import { DateRange, getDateRangesToSync, mergeDateRanges, SerializedSaveQueue } from './persistence';
 import { removeTaskTree } from './task-cache';
-import { parseCompletionSyncRecord, parseSessionSyncRecord } from './sync-records';
+import { parseCompletionSyncRecord, parseSessionSyncRecord, parseWorkoutSyncRecord } from './sync-records';
 import { reorderTaskIds, TaskDropPlacement, updateStoredTaskOrder } from './task-order';
 
 export default class MikumodoroTimerPlugin extends Plugin {
@@ -32,12 +33,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	private completionHistoryLoads = new Map<string, Promise<boolean>>();
 	private customActivityLabels: string[] = [];
 	private taskOrder: string[] = [];
+	private workouts: WorkoutRecord[] = [];
 	private heatmapElements: Set<HTMLElement> = new Set();
 	private saveTimer: number | null = null;
 	private saveQueue = new SerializedSaveQueue();
 	private dateRolloverTimer: number | null = null;
 	private seenSessionRecordFiles = new Set<string>();
 	private seenCompletionRecordFiles = new Set<string>();
+	private seenWorkoutRecordFiles = new Set<string>();
 	private lastRecentCompletionSyncAt = 0;
 
 	private scheduleSave(delayMs = 2000) {
@@ -63,6 +66,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			completions?: CompletionMap;
 			customActivityLabels?: string[];
 			taskOrder?: string[];
+			workouts?: WorkoutRecord[];
 			completionHistoryCoverage?: DateRange[];
 		};
 		if (savedData?.sessions) {
@@ -79,6 +83,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 		if (Array.isArray(savedData?.taskOrder)) {
 			this.taskOrder = [...new Set(savedData.taskOrder.filter(id => typeof id === 'string'))];
+		}
+		if (Array.isArray(savedData?.workouts)) {
+			this.workouts = savedData.workouts;
 		}
 		if (Array.isArray(savedData?.completionHistoryCoverage)) {
 			this.completionHistoryCoverage = mergeDateRanges(savedData.completionHistoryCoverage);
@@ -275,6 +282,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				completions: this.completionMap,
 				customActivityLabels: this.customActivityLabels,
 				taskOrder: this.taskOrder,
+				workouts: this.workouts,
 				completionHistoryCoverage: this.completionHistoryCoverage,
 			});
 		});
@@ -323,10 +331,19 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		this.seenCompletionRecordFiles.add(filePath);
 	}
 
+	private async writeWorkoutRecord(record: WorkoutRecord): Promise<void> {
+		const dir = `${this.manifest.dir}/pending/workouts`;
+		await this.ensureDir(dir);
+		const filePath = `${dir}/${record.id}.json`;
+		await this.app.vault.adapter.write(filePath, JSON.stringify(record));
+		this.seenWorkoutRecordFiles.add(filePath);
+	}
+
 	private async mergeSyncRecords(): Promise<boolean> {
 		let changed = false;
 		const sessionsDir = `${this.manifest.dir}/pending/sessions`;
 		const completionsDir = `${this.manifest.dir}/pending/completions`;
+		const workoutsDir = `${this.manifest.dir}/pending/workouts`;
 
 		// Records stay on disk so every device can eventually receive them.
 		try {
@@ -383,6 +400,29 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		} catch (err) {
 			console.error('Mikumodoro: Failed to merge completion sync records', err);
+		}
+
+		try {
+			if (await this.app.vault.adapter.exists(workoutsDir)) {
+				const listing = await this.app.vault.adapter.list(workoutsDir);
+				const existingIds = new Set(this.workouts.map(record => record.id));
+				for (const file of listing.files) {
+					if (this.seenWorkoutRecordFiles.has(file)) continue;
+					try {
+						const record = parseWorkoutSyncRecord(await this.app.vault.adapter.read(file));
+						if (!existingIds.has(record.id)) {
+							this.workouts.push(record);
+							existingIds.add(record.id);
+							changed = true;
+						}
+						this.seenWorkoutRecordFiles.add(file);
+					} catch (err) {
+						console.error('Mikumodoro: Failed to merge workout sync record', file, err);
+					}
+				}
+			}
+		} catch (err) {
+			console.error('Mikumodoro: Failed to merge workout sync records', err);
 		}
 
 		return changed;
@@ -633,6 +673,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		return this.customActivityLabels;
 	}
 
+	getWorkoutRecords(): WorkoutRecord[] {
+		return [...this.workouts];
+	}
+
 	async trackCustomActivity(label: string) {
 		const fakeTask: TodoistTask = {
 			id: `custom:${label}:${Date.now()}`,
@@ -648,22 +692,46 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		await this.savePluginData();
 	}
 
-	async addManualSession(label: string, durationMinutes: number, date: Date) {
-		const session: PomodoroSession = {
-			id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-			taskId: `custom:${label}`,
-			taskContent: label,
-			startTime: date.getTime(),
-			endTime: date.getTime() + durationMinutes * 60000,
-			durationMinutes,
-			completed: false,
-			dateKey: formatLocalDate(date),
-		};
-		this.timerEngine.mergeSessions([session]);
-		if (!this.customActivityLabels.includes(label)) {
-			this.customActivityLabels.push(label);
+	async addManualLog(label: string, durationMinutes: number, date: Date, pushUps: number, pullUps: number) {
+		if (label) {
+			const session: PomodoroSession = {
+				id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+				taskId: `custom:${label}`,
+				taskContent: label,
+				startTime: date.getTime(),
+				endTime: date.getTime() + durationMinutes * 60000,
+				durationMinutes,
+				completed: false,
+				dateKey: formatLocalDate(date),
+			};
+			this.timerEngine.mergeSessions([session]);
+			if (!this.customActivityLabels.includes(label)) {
+				this.customActivityLabels.push(label);
+			}
+			try {
+				await this.writeSessionRecord(session);
+			} catch (err) {
+				console.error('Mikumodoro: Failed to write session sync record', err);
+			}
 		}
-		await this.persistSession(session);
+
+		if (pushUps + pullUps > 0) {
+			const workout: WorkoutRecord = {
+				id: `workout-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+				dateKey: formatLocalDate(date),
+				timestamp: date.getTime(),
+				pushUps,
+				pullUps,
+			};
+			this.workouts.push(workout);
+			try {
+				await this.writeWorkoutRecord(workout);
+			} catch (err) {
+				console.error('Mikumodoro: Failed to write workout sync record', err);
+			}
+		}
+
+		await this.savePluginData();
 		this.refreshHeatmaps();
 		this.refreshViews();
 	}
@@ -857,6 +925,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			taskNotes?: TaskNoteMap;
 			customActivityLabels?: string[];
 			taskOrder?: string[];
+			workouts?: WorkoutRecord[];
 			completionHistoryCoverage?: DateRange[];
 		};
 		try {
@@ -927,6 +996,17 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			if (JSON.stringify(diskOrder) !== JSON.stringify(this.taskOrder)) {
 				this.taskOrder = diskOrder;
 				changed = true;
+			}
+		}
+
+		if (Array.isArray(data.workouts)) {
+			const existingIds = new Set(this.workouts.map(record => record.id));
+			for (const record of data.workouts) {
+				if (!existingIds.has(record.id)) {
+					this.workouts.push(record);
+					existingIds.add(record.id);
+					changed = true;
+				}
 			}
 		}
 

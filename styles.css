@@ -218,15 +218,15 @@
 	outline: none;
 }
 
-.mikumodoro-task-item.is-dragging {
+.mikumodoro-reorder-item.is-dragging {
 	opacity: 0.45;
 }
 
-.mikumodoro-task-item.drop-before {
+.mikumodoro-reorder-item.drop-before {
 	box-shadow: inset 0 2px 0 var(--interactive-accent);
 }
 
-.mikumodoro-task-item.drop-after {
+.mikumodoro-reorder-item.drop-after {
 	box-shadow: inset 0 -2px 0 var(--interactive-accent);
 }
 
@@ -658,6 +658,19 @@ body.mikumodoro-is-resizing {
 	box-shadow: 0 0 0 1.5px #f59e0b;
 }
 
+/* Workout volume uses the heatmap's percentile scale on a lime inset border. */
+.mikumodoro-heatmap-cell.has-workout,
+.mikumodoro-heatmap-month-cell.has-workout {
+	box-shadow: inset 0 0 0 1.5px var(--mikumodoro-workout-border, #84cc16);
+}
+
+.mikumodoro-heatmap-cell.has-workout.has-due,
+.mikumodoro-heatmap-month-cell.has-workout.has-due {
+	box-shadow:
+		inset 0 0 0 1.5px var(--mikumodoro-workout-border, #84cc16),
+		0 0 0 1.5px #f59e0b;
+}
+
 .mikumodoro-heatmap-cell.today {
 	outline: 2px solid var(--interactive-accent);
 	outline-offset: 1px;
@@ -939,6 +952,33 @@ body.mikumodoro-is-resizing {
 
 .mikumodoro-log-duration-area {
 	margin-bottom: 16px;
+}
+
+.mikumodoro-log-workout-area {
+	margin-bottom: 16px;
+}
+
+.mikumodoro-log-workout-fields {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.mikumodoro-log-workout-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 0.8em;
+	color: var(--text-muted);
+}
+
+.mikumodoro-log-workout-field input {
+	width: 100%;
+	padding: 6px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	background: var(--background-primary);
+	color: var(--text-normal);
 }
 
 .mikumodoro-log-label {

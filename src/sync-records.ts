@@ -1,4 +1,4 @@
-import type { CompletionRecord, PomodoroSession } from './types';
+import type { CompletionRecord, PomodoroSession, WorkoutRecord } from './types';
 
 export interface CompletionSyncRecord extends CompletionRecord {
 	dateStr: string;
@@ -38,4 +38,20 @@ export function parseCompletionSyncRecord(content: string): CompletionSyncRecord
 		throw new Error('Invalid completion sync record');
 	}
 	return value as unknown as CompletionSyncRecord;
+}
+
+export function parseWorkoutSyncRecord(content: string): WorkoutRecord {
+	const value: unknown = JSON.parse(content);
+	if (
+		!isRecord(value)
+		|| typeof value.id !== 'string' || value.id.length === 0
+		|| typeof value.dateKey !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value.dateKey)
+		|| typeof value.timestamp !== 'number' || !Number.isFinite(value.timestamp)
+		|| typeof value.pushUps !== 'number' || !Number.isInteger(value.pushUps) || value.pushUps < 0
+		|| typeof value.pullUps !== 'number' || !Number.isInteger(value.pullUps) || value.pullUps < 0
+		|| value.pushUps + value.pullUps === 0
+	) {
+		throw new Error('Invalid workout sync record');
+	}
+	return value as unknown as WorkoutRecord;
 }

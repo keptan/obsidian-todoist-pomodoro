@@ -1,7 +1,8 @@
 import { setIcon } from 'obsidian';
-import type { PomodoroSession, MikumodoroSettings } from './types';
+import type { PomodoroSession, MikumodoroSettings, WorkoutTotals } from './types';
 import type MikumodoroTimerPlugin from './main';
 import { formatLocalDate, formatMinutes, formatRollingYear, getSessionDateKey, rollingYearWindow } from './utils';
+import { buildWorkoutMap } from './workout';
 
 interface TaskMinutesEntry {
 	taskContent: string;
@@ -12,6 +13,8 @@ interface SelectionSummary {
 	totalMinutes: number;
 	averageMinutes: number;
 	completions: number;
+	pushUps: number;
+	pullUps: number;
 	tasks: TaskMinutesEntry[];
 }
 
@@ -61,6 +64,9 @@ export function renderHeatmap(
 	}
 
 	const completionMap = plugin?.getCompletionMap() ?? {};
+	const workoutMap = settings.workoutTrackingEnabled && plugin
+		? buildWorkoutMap(plugin.getWorkoutRecords())
+		: new Map<string, WorkoutTotals>();
 	const dueDateSet = new Set<string>();
 	const dueDateTasks = new Map<string, string[]>();
 	if (plugin) {
@@ -74,12 +80,12 @@ export function renderHeatmap(
 		}
 	}
 
-	function getMaxMinutesInRange(startDate: Date, endDate: Date): number {
+	function getMaxInRange(valuesByDay: Map<string, number>, startDate: Date, endDate: Date): number {
 		const values: number[] = [];
 		const d = new Date(startDate);
 		while (d <= endDate) {
 			const key = formatLocalDate(d);
-			const val = dayMap.get(key) ?? 0;
+			const val = valuesByDay.get(key) ?? 0;
 			if (val > 0) values.push(val);
 			d.setDate(d.getDate() + 1);
 		}
@@ -90,6 +96,11 @@ export function renderHeatmap(
 		const actualMax = values[values.length - 1] ?? 1;
 		return Math.max(p90, actualMax * 0.5, 1);
 	}
+	const workoutScoreMap = new Map(
+		[...workoutMap].map(([date, workout]) => [date, workout.weightedReps]),
+	);
+	const getMaxMinutesInRange = (startDate: Date, endDate: Date) => getMaxInRange(dayMap, startDate, endDate);
+	const getMaxWorkoutInRange = (startDate: Date, endDate: Date) => getMaxInRange(workoutScoreMap, startDate, endDate);
 
 	let slideDirection: 'left' | 'right' | 'none' = 'none';
 
@@ -135,7 +146,7 @@ export function renderHeatmap(
 				if (currentYear < today.getFullYear()) { currentYear++; slideDirection = 'left'; render(); }
 			});
 			if (currentYear >= today.getFullYear()) nextBtn.classList.add('disabled');
-			renderYearView(contentArea, currentYear, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange);
+			renderYearView(contentArea, currentYear, dayMap, dayTaskMap, workoutMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange, getMaxWorkoutInRange);
 		} else {
 			if (plugin) requestHistory(`month:${currentYear}:${currentMonth}`, () => plugin.ensureCompletionHistoryForMonth(currentYear, currentMonth));
 			const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -153,7 +164,7 @@ export function renderHeatmap(
 			if (currentYear > today.getFullYear() || (currentYear === today.getFullYear() && currentMonth >= today.getMonth())) {
 				nextBtn.classList.add('disabled');
 			}
-			renderMonthView(contentArea, currentYear, currentMonth, dayMap, dayTaskMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange);
+			renderMonthView(contentArea, currentYear, currentMonth, dayMap, dayTaskMap, workoutMap, completionMap, dueDateSet, dueDateTasks, settings, today, getMaxMinutesInRange, getMaxWorkoutInRange);
 		}
 		tooltips.bindCells(surface);
 	}
@@ -167,15 +178,18 @@ function renderYearView(
 	year: number,
 	dayMap: Map<string, number>,
 	dayTaskMap: Map<string, TaskMinutesEntry[]>,
+	workoutMap: Map<string, WorkoutTotals>,
 	completionMap: Record<string, Array<{taskId: string; taskContent: string; timestamp: number}>>,
 	dueDateSet: Set<string>,
 	dueDateTasks: Map<string, string[]>,
 	settings: MikumodoroSettings,
 	today: Date,
 	getMax: (start: Date, end: Date) => number,
+	getMaxWorkout: (start: Date, end: Date) => number,
 ) {
 	const { start: yearStart, end: yearEnd } = rollingYearWindow(year, today);
 	const maxMinutes = getMax(yearStart, yearEnd);
+	const maxWorkout = getMaxWorkout(yearStart, yearEnd);
 
 	const totalMinutes = sumMinutesInRange(dayMap, yearStart, yearEnd);
 	const statsEl = container.createDiv({ cls: 'mikumodoro-heatmap-stats' });
@@ -217,6 +231,7 @@ function renderYearView(
 			const dateStr = formatLocalDate(date);
 			const minutes = dayMap.get(dateStr) ?? 0;
 			const completions = completionMap[dateStr]?.length ?? 0;
+			const workout = workoutMap.get(dateStr);
 			const isFuture = date > today;
 			const isToday = dateStr === formatLocalDate(today);
 			const hasDue = dueDateSet.has(dateStr);
@@ -226,6 +241,8 @@ function renderYearView(
 				cell.dataset.selectionDay = dateStr;
 				cell.dataset.selectionMinutes = String(minutes);
 				cell.dataset.selectionCompletions = String(completions);
+				cell.dataset.selectionPushUps = String(workout?.pushUps ?? 0);
+				cell.dataset.selectionPullUps = String(workout?.pullUps ?? 0);
 				cell.dataset.selectionTasks = JSON.stringify(dayTaskMap.get(dateStr) ?? []);
 			}
 
@@ -242,11 +259,16 @@ function renderYearView(
 
 			if (isInYear) {
 				if (hasDue) cell.classList.add('has-due');
+				if (workout && !isFuture) {
+					cell.classList.add('has-workout');
+					const intensity = Math.min(1, workout.weightedReps / maxWorkout);
+					cell.style.setProperty('--mikumodoro-workout-border', interpolateColor('#84cc16', intensity));
+				}
 			}
 
 			if (isInYear) {
 				const dueTasks = dueDateTasks.get(dateStr) ?? [];
-				const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap);
+				const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap, workout);
 				cell.setAttribute('data-tooltip', tooltipText);
 				cell.classList.add('has-tooltip');
 			}
@@ -266,16 +288,19 @@ function renderMonthView(
 	month: number,
 	dayMap: Map<string, number>,
 	dayTaskMap: Map<string, TaskMinutesEntry[]>,
+	workoutMap: Map<string, WorkoutTotals>,
 	completionMap: Record<string, Array<{taskId: string; taskContent: string; timestamp: number}>>,
 	dueDateSet: Set<string>,
 	dueDateTasks: Map<string, string[]>,
 	settings: MikumodoroSettings,
 	today: Date,
 	getMax: (start: Date, end: Date) => number,
+	getMaxWorkout: (start: Date, end: Date) => number,
 ) {
 	const monthStart = new Date(year, month, 1);
 	const monthEnd = new Date(year, month + 1, 0);
 	const maxMinutes = getMax(monthStart, monthEnd);
+	const maxWorkout = getMaxWorkout(monthStart, monthEnd);
 
 	const totalMinutes = sumMinutesInRange(dayMap, monthStart, monthEnd);
 	const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -299,6 +324,7 @@ function renderMonthView(
 		const dateStr = formatLocalDate(date);
 		const minutes = dayMap.get(dateStr) ?? 0;
 		const completions = completionMap[dateStr]?.length ?? 0;
+		const workout = workoutMap.get(dateStr);
 		const isFuture = date > today;
 		const isToday = dateStr === formatLocalDate(today);
 		const hasDue = dueDateSet.has(dateStr);
@@ -307,6 +333,8 @@ function renderMonthView(
 		cell.dataset.selectionDay = dateStr;
 		cell.dataset.selectionMinutes = String(minutes);
 		cell.dataset.selectionCompletions = String(completions);
+		cell.dataset.selectionPushUps = String(workout?.pushUps ?? 0);
+		cell.dataset.selectionPullUps = String(workout?.pullUps ?? 0);
 		cell.dataset.selectionTasks = JSON.stringify(dayTaskMap.get(dateStr) ?? []);
 		cell.createSpan({ cls: 'mikumodoro-heatmap-month-day-num', text: String(day) });
 
@@ -320,9 +348,14 @@ function renderMonthView(
 		}
 
 		if (hasDue) cell.classList.add('has-due');
+		if (workout && !isFuture) {
+			cell.classList.add('has-workout');
+			const intensity = Math.min(1, workout.weightedReps / maxWorkout);
+			cell.style.setProperty('--mikumodoro-workout-border', interpolateColor('#84cc16', intensity));
+		}
 
 		const dueTasks = dueDateTasks.get(dateStr) ?? [];
-		const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap);
+		const tooltipText = buildTooltip(dateStr, date, minutes, completions, hasDue, dueTasks, dayTaskMap, workout);
 		cell.setAttribute('data-tooltip', tooltipText);
 		cell.classList.add('has-tooltip');
 
@@ -340,11 +373,23 @@ export function buildTooltip(
 	hasDue: boolean,
 	dueTasks: string[],
 	dayTaskMap: Map<string, TaskMinutesEntry[]>,
+	workout?: WorkoutTotals,
 ): string {
 	const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 	const lines: string[] = [];
+	if (workout) {
+		lines.push(dateLabel);
+	}
 	if (minutes > 0) {
-		lines.push(`${dateLabel}: ${formatMinutes(minutes)} total`);
+		lines.push(workout
+			? `  Worked: ${formatMinutes(minutes)} total`
+			: `${dateLabel}: ${formatMinutes(minutes)} total`);
+	}
+	if (workout) {
+		lines.push(`  Push-ups: ${workout.pushUps}`);
+		lines.push(`  Pull-ups: ${workout.pullUps}`);
+	}
+	if (minutes > 0) {
 		const taskEntries = dayTaskMap.get(dateStr);
 		if (taskEntries && taskEntries.length > 0) {
 			const sorted = [...taskEntries].sort((a, b) => b.minutes - a.minutes);
@@ -357,7 +402,7 @@ export function buildTooltip(
 				lines.push(`  and ${sorted.length - 5} more`);
 			}
 		}
-	} else {
+	} else if (!workout) {
 		lines.push(dateLabel);
 	}
 	const extras: string[] = [];
@@ -429,7 +474,13 @@ function attachTooltips(owner: HTMLElement): { bindCells: (surface: HTMLElement)
 }
 
 export function summarizeSelectedDays(
-	days: Array<{ minutes: number; completions: number; tasks: TaskMinutesEntry[] }>,
+	days: Array<{
+		minutes: number;
+		completions: number;
+		pushUps?: number;
+		pullUps?: number;
+		tasks: TaskMinutesEntry[];
+	}>,
 ): SelectionSummary {
 	const totalMinutes = days.reduce((total, day) => total + day.minutes, 0);
 	const taskTotals = new Map<string, number>();
@@ -442,6 +493,8 @@ export function summarizeSelectedDays(
 		totalMinutes,
 		averageMinutes: days.length > 0 ? Math.round(totalMinutes / days.length) : 0,
 		completions: days.reduce((total, day) => total + day.completions, 0),
+		pushUps: days.reduce((total, day) => total + (day.pushUps ?? 0), 0),
+		pullUps: days.reduce((total, day) => total + (day.pullUps ?? 0), 0),
 		tasks: Array.from(taskTotals, ([taskContent, minutes]) => ({ taskContent, minutes }))
 			.sort((a, b) => b.minutes - a.minutes),
 	};
@@ -451,6 +504,10 @@ export function formatSelectionSummary(summary: SelectionSummary): string {
 	const lines = [
 		`${formatMinutes(summary.totalMinutes)} total · ${formatMinutes(summary.averageMinutes)}/day`,
 	];
+	if (summary.pushUps > 0 || summary.pullUps > 0) {
+		lines.push(`Push-ups: ${summary.pushUps}`);
+		lines.push(`Pull-ups: ${summary.pullUps}`);
+	}
 	for (const task of summary.tasks.slice(0, 5)) {
 		const name = task.taskContent.length > 30 ? task.taskContent.slice(0, 30) + '...' : task.taskContent;
 		lines.push(`${name}: ${formatMinutes(task.minutes)}`);
@@ -465,6 +522,8 @@ function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
 		el: HTMLElement;
 		minutes: number;
 		completions: number;
+		pushUps: number;
+		pullUps: number;
 		tasks: TaskMinutesEntry[];
 	}
 
@@ -492,6 +551,8 @@ function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
 				el,
 				minutes: Number(el.dataset.selectionMinutes) || 0,
 				completions: Number(el.dataset.selectionCompletions) || 0,
+				pushUps: Number(el.dataset.selectionPushUps) || 0,
+				pullUps: Number(el.dataset.selectionPullUps) || 0,
 				tasks,
 			};
 		});
@@ -510,7 +571,13 @@ function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
 			selectionBox.style.height = `${bottom - top}px`;
 
 			selectedCells.clear();
-			const selectedDays: Array<{ minutes: number; completions: number; tasks: TaskMinutesEntry[] }> = [];
+			const selectedDays: Array<{
+				minutes: number;
+				completions: number;
+				pushUps: number;
+				pullUps: number;
+				tasks: TaskMinutesEntry[];
+			}> = [];
 			for (const cell of cells) {
 				const rect = cell.el.getBoundingClientRect();
 				const intersects = rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
@@ -520,6 +587,8 @@ function attachDragSelection(surface: HTMLElement, owner: HTMLElement) {
 					selectedDays.push({
 						minutes: cell.minutes,
 						completions: cell.completions,
+						pushUps: cell.pushUps,
+						pullUps: cell.pullUps,
 						tasks: cell.tasks,
 					});
 				}

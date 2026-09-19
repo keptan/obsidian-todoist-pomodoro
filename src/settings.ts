@@ -27,6 +27,7 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 				'Auto-start break',
 				'Sound chime on break',
 				'System notifications',
+				'Workout tracking',
 				'Heatmap color',
 				'Heatmap default view',
 				'Reset settings',
@@ -147,6 +148,19 @@ export class MikumodoroSettingTab extends PluginSettingTab {
 						if (value && 'Notification' in window) {
 							void Notification.requestPermission();
 						}
+					})
+			);
+
+		new Setting(containerEl)
+			.setName('Workout tracking')
+			.setDesc('Add push-up and pull-up logging to the manual log window and heatmap.')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.workoutTrackingEnabled)
+					.onChange(async (value) => {
+						this.plugin.settings.workoutTrackingEnabled = value;
+						await this.plugin.saveSettings();
+						this.plugin.refreshHeatmaps();
 					})
 			);
 

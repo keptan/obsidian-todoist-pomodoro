@@ -6,10 +6,11 @@ An Obsidian Pomodoro timer with Todoist tasks and a contribution heatmap.
 
 - Work for as long as you want, then take a break based on the time you worked.
 - Browse, create, select, and complete Todoist tasks without leaving Obsidian.
-- Drag tasks into your preferred order in the Obsidian task list.
+- Drag tasks and project groups into your preferred order in the Obsidian task list.
 - Group tasks by project, display subtasks, and link tasks to notes.
 - Track sessions in year and month heatmaps.
 - Add time manually and import completed-task history from Todoist.
+- Optionally log push-ups and pull-ups, with workout volume shown on the heatmap.
 - Optional break sounds and system notifications.
 
 ## Installation
@@ -43,7 +44,7 @@ To add a heatmap to a note, use:
 
 ## Privacy
 
-Todoist Pomodoro Heatmap has no telemetry. It connects directly to Todoist only after you provide an API token. Your token, settings, sessions, task links, and completion history are stored in the plugin folder. Sessions and completions also use small, immutable records so vault-sync services can merge activity from multiple devices without relying on a single shared `data.json` write.
+Todoist Pomodoro Heatmap has no telemetry. It connects directly to Todoist only after you provide an API token. Your token, settings, sessions, workouts, task links, and completion history are stored in the plugin folder. Sessions, workouts, and completions also use small, immutable records so vault-sync services can merge activity from multiple devices without relying on a single shared `data.json` write.
 
 ## Development
 

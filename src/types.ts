@@ -7,6 +7,7 @@ export interface MikumodoroSettings {
 	heatmapViewMode: 'year' | 'month';
 	soundEnabled: boolean;
 	notificationsEnabled: boolean;
+	workoutTrackingEnabled: boolean;
 	sessionsHeight: number;
 }
 
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: MikumodoroSettings = {
 	heatmapViewMode: 'year',
 	soundEnabled: true,
 	notificationsEnabled: true,
+	workoutTrackingEnabled: false,
 	sessionsHeight: 0,
 };
 
@@ -80,3 +82,17 @@ export interface CompletionRecord {
 	timestamp: number;
 }
 export type CompletionMap = Record<string, CompletionRecord[]>;
+
+export interface WorkoutRecord {
+	id: string;
+	dateKey: string;
+	timestamp: number;
+	pushUps: number;
+	pullUps: number;
+}
+
+export interface WorkoutTotals {
+	pushUps: number;
+	pullUps: number;
+	weightedReps: number;
+}

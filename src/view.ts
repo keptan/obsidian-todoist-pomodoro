@@ -17,8 +17,8 @@ export class TimerView extends ItemView {
 	private lastBreakExtended: boolean = false;
 	private removeTimerStateListener: (() => void) | null = null;
 	private resizeCleanups: Array<() => void> = [];
-	private draggedTaskId: string | null = null;
-	private dropTargetTaskId: string | null = null;
+	private draggedOrderId: string | null = null;
+	private dropTargetOrderId: string | null = null;
 	private dropPlacement: TaskDropPlacement = 'before';
 
 	constructor(leaf: WorkspaceLeaf, plugin: MikumodoroTimerPlugin) {
@@ -218,7 +218,7 @@ export class TimerView extends ItemView {
 
 			const extendBtn = controls.createEl('button', {
 				cls: 'mikumodoro-btn mikumodoro-btn-secondary',
-				text: '🏋️ double break',
+				text: '🏋️ work out',
 			});
 			this.extendBtnEl = extendBtn;
 			if (this.plugin.timerEngine.isBreakExtended()) {
@@ -226,7 +226,11 @@ export class TimerView extends ItemView {
 				extendBtn.classList.add('mikumodoro-btn-disabled');
 			}
 			extendBtn.addEventListener('click', () => {
-				this.plugin.timerEngine.extendBreak(2);
+				if (this.plugin.settings.workoutTrackingEnabled) {
+					this.openBreakWorkoutLogger();
+				} else {
+					this.plugin.timerEngine.extendBreak(2);
+				}
 			});
 
 			const stopBtn = controls.createEl('button', {
@@ -351,10 +355,20 @@ export class TimerView extends ItemView {
 			}
 		}
 
-		// Sort projects alphabetically
-		const sortedProjects = [...projectGroups.entries()].sort((a, b) =>
-			a[1].projectName.localeCompare(b[1].projectName)
-		);
+		// Unordered projects remain alphabetical; dragged projects use the same
+		// local-only order store as tasks under namespaced IDs.
+		const projectOrder = new Map(this.plugin.getTaskOrder().map((id, index) => [id, index]));
+		const sortedProjects = [...projectGroups.entries()].sort((a, b) => {
+			const aIndex = projectOrder.get(`project:${a[0]}`);
+			const bIndex = projectOrder.get(`project:${b[0]}`);
+			if (aIndex !== undefined && bIndex !== undefined) return aIndex - bIndex;
+			if (aIndex !== undefined) return -1;
+			if (bIndex !== undefined) return 1;
+			return a[1].projectName.localeCompare(b[1].projectName);
+		});
+		const visibleProjectOrderIds = sortedProjects
+			.filter(([, group]) => group.tasks.some(task => !task.parent_id))
+			.map(([projectId]) => `project:${projectId}`);
 
 		// Render project groups
 		for (const [projectId, group] of sortedProjects) {
@@ -363,6 +377,22 @@ export class TimerView extends ItemView {
 
 			// Project header (collapsible)
 			const projectHeader = listEl.createDiv({ cls: 'mikumodoro-project-header' });
+			const projectOrderId = `project:${projectId}`;
+			projectHeader.classList.add('mikumodoro-reorder-item');
+			projectHeader.dataset.orderId = projectOrderId;
+			if (visibleProjectOrderIds.length > 1) {
+				const dragHandle = projectHeader.createSpan({
+					cls: 'mikumodoro-task-drag-handle',
+					text: '⠿',
+					attr: {
+						'aria-label': `Reorder project ${group.projectName}`,
+						'role': 'button',
+						'tabindex': '0',
+						'title': 'Drag to reorder project',
+					},
+				});
+				this.bindLocalReordering(dragHandle, projectHeader, projectOrderId, visibleProjectOrderIds);
+			}
 			const projectArrow = projectHeader.createSpan({ cls: 'mikumodoro-project-arrow' });
 			projectArrow.setText('▾');
 			projectHeader.createSpan({ text: group.projectName, cls: 'mikumodoro-project-name' });
@@ -423,8 +453,8 @@ export class TimerView extends ItemView {
 	}
 
 	private clearTaskDragState() {
-		this.draggedTaskId = null;
-		this.dropTargetTaskId = null;
+		this.draggedOrderId = null;
+		this.dropTargetOrderId = null;
 		this.containerEl.querySelectorAll('.is-dragging, .drop-before, .drop-after').forEach(element => {
 			element.classList.remove('is-dragging', 'drop-before', 'drop-after');
 		});
@@ -450,55 +480,17 @@ export class TimerView extends ItemView {
 		});
 	}
 
-	private bindTaskReordering(
+	private bindLocalReordering(
 		dragHandle: HTMLElement,
 		item: HTMLElement,
-		task: TodoistTask,
-		siblings: TodoistTask[],
+		itemId: string,
+		siblingIds: string[],
 	) {
-		const siblingIds = siblings.map(sibling => sibling.id);
-		const canDrop = (draggedId: string | null) =>
-			draggedId !== null && draggedId !== task.id && siblingIds.includes(draggedId);
-		const placementAt = (clientY: number): TaskDropPlacement => {
-			const bounds = item.getBoundingClientRect();
-			return clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
-		};
-		const updateDropTarget = (clientY: number) => {
-			if (!canDrop(this.draggedTaskId)) return false;
-			this.dropTargetTaskId = task.id;
-			this.dropPlacement = placementAt(clientY);
-			this.showTaskDropTarget(item, this.dropPlacement);
-			return true;
-		};
-
-		dragHandle.draggable = true;
 		dragHandle.addEventListener('click', event => event.stopPropagation());
-		dragHandle.addEventListener('dragstart', event => {
-			event.stopPropagation();
-			this.draggedTaskId = task.id;
-			item.classList.add('is-dragging');
-			if (event.dataTransfer) {
-				event.dataTransfer.effectAllowed = 'move';
-				event.dataTransfer.setData('text/plain', task.id);
-			}
-		});
-		dragHandle.addEventListener('dragend', () => this.clearTaskDragState());
-
-		item.addEventListener('dragover', event => {
-			if (!updateDropTarget(event.clientY)) return;
-			event.preventDefault();
-			if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
-		});
-		item.addEventListener('drop', event => {
-			if (!updateDropTarget(event.clientY) || !this.draggedTaskId) return;
-			event.preventDefault();
-			event.stopPropagation();
-			this.commitTaskReorder(siblingIds, this.draggedTaskId, task.id, this.dropPlacement);
-		});
 
 		dragHandle.addEventListener('keydown', event => {
 			if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-			const currentIndex = siblingIds.indexOf(task.id);
+			const currentIndex = siblingIds.indexOf(itemId);
 			const targetIndex = currentIndex + (event.key === 'ArrowUp' ? -1 : 1);
 			const targetId = siblingIds[targetIndex];
 			if (!targetId) return;
@@ -506,39 +498,41 @@ export class TimerView extends ItemView {
 			event.stopPropagation();
 			this.commitTaskReorder(
 				siblingIds,
-				task.id,
+				itemId,
 				targetId,
 				event.key === 'ArrowUp' ? 'before' : 'after',
 			);
 		});
 
-		// Native HTML drag events do not consistently fire on touch devices.
+		// A single pointer implementation works consistently in Electron and on
+		// mobile, unlike native HTML drag events on small nested handles.
 		dragHandle.addEventListener('pointerdown', event => {
-			if (event.pointerType === 'mouse') return;
+			if (event.button !== 0) return;
 			event.preventDefault();
 			event.stopPropagation();
-			this.draggedTaskId = task.id;
+			this.draggedOrderId = itemId;
 			item.classList.add('is-dragging');
 			dragHandle.setPointerCapture(event.pointerId);
 		});
 		dragHandle.addEventListener('pointermove', event => {
-			if (event.pointerType === 'mouse' || this.draggedTaskId !== task.id) return;
+			if (this.draggedOrderId !== itemId) return;
 			event.preventDefault();
 			const targetItem = document
 				.elementFromPoint(event.clientX, event.clientY)
-				?.closest<HTMLElement>('.mikumodoro-task-item');
-			const targetId = targetItem?.dataset.taskId;
-			if (!targetItem || !targetId || targetId === task.id || !siblingIds.includes(targetId)) return;
-			this.dropTargetTaskId = targetId;
+				?.closest<HTMLElement>('.mikumodoro-reorder-item');
+			const targetId = targetItem?.dataset.orderId;
+			if (!targetItem || !targetId || targetId === itemId || !siblingIds.includes(targetId)) return;
+			this.dropTargetOrderId = targetId;
 			const bounds = targetItem.getBoundingClientRect();
 			this.dropPlacement = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
 			this.showTaskDropTarget(targetItem, this.dropPlacement);
 		});
 		dragHandle.addEventListener('pointerup', event => {
-			if (event.pointerType === 'mouse' || this.draggedTaskId !== task.id) return;
+			if (this.draggedOrderId !== itemId) return;
 			event.preventDefault();
-			if (this.dropTargetTaskId) {
-				this.commitTaskReorder(siblingIds, task.id, this.dropTargetTaskId, this.dropPlacement);
+			event.stopPropagation();
+			if (this.dropTargetOrderId) {
+				this.commitTaskReorder(siblingIds, itemId, this.dropTargetOrderId, this.dropPlacement);
 			} else {
 				this.clearTaskDragState();
 			}
@@ -621,6 +615,8 @@ export class TimerView extends ItemView {
 		// Task row
 		const item = wrapper.createDiv({ cls: 'mikumodoro-task-item' });
 		item.dataset.taskId = task.id;
+		item.dataset.orderId = task.id;
+		item.classList.add('mikumodoro-reorder-item');
 		if (isSelected) item.classList.add('selected');
 
 		if (siblings.length > 1) {
@@ -634,7 +630,7 @@ export class TimerView extends ItemView {
 					'title': 'Drag to reorder',
 				},
 			});
-			this.bindTaskReordering(dragHandle, item, task, siblings);
+			this.bindLocalReordering(dragHandle, item, task.id, siblings.map(sibling => sibling.id));
 		}
 
 		// Only parents need an expand arrow. This is recalculated from the
@@ -1186,12 +1182,92 @@ export class TimerView extends ItemView {
 		modal.open();
 	}
 
+	private createWorkoutFields(container: HTMLElement): {
+		pushUpsInput: HTMLInputElement;
+		pullUpsInput: HTMLInputElement;
+	} {
+		const workoutArea = container.createDiv({ cls: 'mikumodoro-log-workout-area' });
+		workoutArea.createEl('label', { text: 'Workout', cls: 'mikumodoro-log-label' });
+		const fields = workoutArea.createDiv({ cls: 'mikumodoro-log-workout-fields' });
+
+		const pushUpsLabel = fields.createEl('label', { cls: 'mikumodoro-log-workout-field' });
+		pushUpsLabel.createSpan({ text: 'Push-ups' });
+		const pushUpsInput = pushUpsLabel.createEl('input', {
+			type: 'number',
+			attr: { min: '0', step: '1', inputmode: 'numeric' },
+		});
+		pushUpsInput.value = '0';
+
+		const pullUpsLabel = fields.createEl('label', { cls: 'mikumodoro-log-workout-field' });
+		pullUpsLabel.createSpan({ text: 'Pull-ups' });
+		const pullUpsInput = pullUpsLabel.createEl('input', {
+			type: 'number',
+			attr: { min: '0', step: '1', inputmode: 'numeric' },
+		});
+		pullUpsInput.value = '0';
+
+		return { pushUpsInput, pullUpsInput };
+	}
+
+	private readWorkoutFields(pushUpsInput: HTMLInputElement, pullUpsInput: HTMLInputElement) {
+		return {
+			pushUps: Math.max(0, parseInt(pushUpsInput.value) || 0),
+			pullUps: Math.max(0, parseInt(pullUpsInput.value) || 0),
+		};
+	}
+
+	private openBreakWorkoutLogger() {
+		const modal = new Modal(this.app);
+		modal.titleEl.setText('Log workout');
+		modal.contentEl.createEl('p', {
+			text: 'Log your reps to double this break.',
+			cls: 'mikumodoro-modal-desc',
+		});
+		const { pushUpsInput, pullUpsInput } = this.createWorkoutFields(modal.contentEl);
+		const submitBtn = modal.contentEl.createEl('button', {
+			cls: 'mikumodoro-btn mikumodoro-btn-primary',
+			text: 'Log and double break',
+		});
+		const submit = async () => {
+			const { pushUps, pullUps } = this.readWorkoutFields(pushUpsInput, pullUpsInput);
+			if (pushUps + pullUps === 0) {
+				new Notice('Enter push-ups or pull-ups');
+				return;
+			}
+			submitBtn.disabled = true;
+			try {
+				await this.plugin.addManualLog('', 0, new Date(), pushUps, pullUps);
+				this.plugin.timerEngine.extendBreak(2);
+				const logged = [
+					pushUps > 0 ? `${pushUps} push-ups` : '',
+					pullUps > 0 ? `${pullUps} pull-ups` : '',
+				].filter(Boolean);
+				new Notice(`Logged ${logged.join(' · ')}`);
+				modal.close();
+			} catch (err) {
+				console.error('Mikumodoro: Failed to log break workout', err);
+				new Notice('Failed to log workout');
+				submitBtn.disabled = false;
+			}
+		};
+		submitBtn.addEventListener('click', () => void submit());
+		for (const input of [pushUpsInput, pullUpsInput]) {
+			input.addEventListener('keydown', event => {
+				if (event.key === 'Enter') void submit();
+			});
+		}
+		pushUpsInput.focus();
+		modal.open();
+	}
+
 	private openManualTimeLogger() {
 		const modal = new Modal(this.app);
 		modal.titleEl.setText('Log time');
 
 		modal.contentEl.createEl('p', {
-			text: 'Add time for something you already did:',
+			text: this.plugin.settings.workoutTrackingEnabled
+				? 'Add time, workout reps, or both:'
+				: 'Add time for something you already did:',
 			cls: 'mikumodoro-modal-desc',
 		});
 
@@ -1246,6 +1322,12 @@ export class TimerView extends ItemView {
 			valueDisplay.setText(h > 0 ? `${h}h ${m}m` : `${m}m`);
 		});
 
+		let pushUpsInput: HTMLInputElement | null = null;
+		let pullUpsInput: HTMLInputElement | null = null;
+		if (this.plugin.settings.workoutTrackingEnabled) {
+			({ pushUpsInput, pullUpsInput } = this.createWorkoutFields(modal.contentEl));
+		}
+
 		const currentTimeArea = modal.contentEl.createEl('label', { cls: 'mikumodoro-log-current-time' });
 		const currentTimeInput = currentTimeArea.createEl('input', { type: 'checkbox' });
 		currentTimeInput.checked = true;
@@ -1265,16 +1347,28 @@ export class TimerView extends ItemView {
 
 		const addBtn = modal.contentEl.createEl('button', {
 			cls: 'mikumodoro-btn mikumodoro-btn-primary',
-			text: 'Add time',
+			text: this.plugin.settings.workoutTrackingEnabled ? 'Add log' : 'Add time',
 		});
 		addBtn.addEventListener('click', () => void (async () => {
 			const label = inputEl.value.trim();
-			if (!label) return;
+			const { pushUps, pullUps } = pushUpsInput && pullUpsInput
+				? this.readWorkoutFields(pushUpsInput, pullUpsInput)
+				: { pushUps: 0, pullUps: 0 };
+			if (!label && pushUps + pullUps === 0) {
+				new Notice(this.plugin.settings.workoutTrackingEnabled
+					? 'Enter an activity or workout reps'
+					: 'Enter an activity');
+				return;
+			}
 			const minutes = parseInt(slider.value);
 			const dateStr = dateInput.value || todayStr;
 			const sessionDate = currentTimeInput.checked ? new Date() : new Date(dateStr + 'T12:00:00');
-			await this.plugin.addManualSession(label, minutes, sessionDate);
-			new Notice(`Logged ${minutes}m for "${label}"`);
+			await this.plugin.addManualLog(label, minutes, sessionDate, pushUps, pullUps);
+			const logged: string[] = [];
+			if (label) logged.push(`${minutes}m for "${label}"`);
+			if (pushUps > 0) logged.push(`${pushUps} push-ups`);
+			if (pullUps > 0) logged.push(`${pullUps} pull-ups`);
+			new Notice(`Logged ${logged.join(' · ')}`);
 			modal.close();
 			this.render();
 		})());
