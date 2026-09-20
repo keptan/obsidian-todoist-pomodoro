@@ -161,6 +161,20 @@ assert(workLimitNotifications === 1, 'Work target should notify once');
 continuousEngine.tick();
 assert(workLimitNotifications === 1, 'Work target should not notify repeatedly');
 
+// Extending after some break time has elapsed doubles the original total
+// duration, rather than doubling only the remaining countdown.
+const delayedExtensionEngine = new TimerEngine(settings);
+delayedExtensionEngine.startWork(mockTask);
+delayedExtensionEngine.state.startTime = Date.now() - settings.defaultWorkMinutes * 60000;
+delayedExtensionEngine.startBreak();
+delayedExtensionEngine.state.startTime = Date.now() - 2 * 60000;
+delayedExtensionEngine.extendBreak(2);
+const extendedRemainingMinutes = delayedExtensionEngine.getBreakRemainingMs() / 60000;
+assert(
+	extendedRemainingMinutes > 7.9 && extendedRemainingMinutes < 8.1,
+	'Delayed extension should leave original total × 2 minus elapsed time',
+);
+
 // Device session records merge additively and idempotently regardless of order.
 const syncEngine = new TimerEngine(settings);
 const deviceASession = { ...savedSessions[0], id: 'device-a-session' };
@@ -172,6 +186,7 @@ assert(syncEngine.getSessions().length === 2, 'Both device sessions should remai
 engine.destroy();
 newEngine.destroy();
 continuousEngine.destroy();
+delayedExtensionEngine.destroy();
 syncEngine.destroy();
 
 console.log('---');

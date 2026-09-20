@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
 	getDateRangesToSync,
 	getUncoveredDateRanges,
+	hasRecordsMissingFromDisk,
 	mergeDateRanges,
 	SerializedSaveQueue,
 } from '../src/persistence.ts';
@@ -33,6 +34,18 @@ await queue.drain();
 if (writes.at(-1) !== 'after-failure') {
 	throw new Error('A failed write poisoned the save queue');
 }
+
+const localRecords = [{ id: 'phone' }, { id: 'shared' }];
+assert.equal(
+	hasRecordsMissingFromDisk(localRecords, [{ id: 'shared' }], record => record.id),
+	true,
+	'a local recovery record missing from synced data should trigger a repair save',
+);
+assert.equal(
+	hasRecordsMissingFromDisk(localRecords, [{ id: 'shared' }, { id: 'phone' }], record => record.id),
+	false,
+	'a complete synced union should not trigger another repair save',
+);
 
 assert.deepEqual(
 	mergeDateRanges([

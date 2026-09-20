@@ -22,6 +22,7 @@ export class TimerEngine {
 	private onBreakEnd?: () => void;
 	private pausedMode: 'working' | 'break' | null = null;
 	private breakDurationMs = 0;
+	private baseBreakDurationMs = 0;
 	private accumulatedBreakMs = 0;
 	private breakExtended = false;
 	private workLimitNotified = false;
@@ -148,6 +149,7 @@ export class TimerEngine {
 		breakMs += this.accumulatedBreakMs;
 		this.accumulatedBreakMs = 0;
 		this.breakDurationMs = breakMs;
+		this.baseBreakDurationMs = breakMs;
 		this.breakExtended = false;
 
 		this.state = {
@@ -190,9 +192,10 @@ export class TimerEngine {
 		if (this.state.mode !== 'break') return;
 		if (this.breakExtended) return; // already extended, ignore
 		this.breakExtended = true;
-		this.breakDurationMs = Math.round(this.breakDurationMs * multiplier);
+		this.breakDurationMs = Math.round(this.baseBreakDurationMs * multiplier);
+		this.state.elapsedMs = this.getElapsedMs();
 		this.notify();
-		const remainMin = Math.round((this.breakDurationMs - this.state.elapsedMs) / 60000);
+		const remainMin = Math.round(this.getBreakRemainingMs() / 60000);
 		new Notice(`Break extended! ~${remainMin} min remaining`);
 	}
 
@@ -212,6 +215,7 @@ export class TimerEngine {
 		this.pausedMode = null;
 		this.workLimitNotified = false;
 		this.breakDurationMs = 0;
+		this.baseBreakDurationMs = 0;
 		this.startInterval();
 		this.notify();
 
@@ -250,6 +254,7 @@ export class TimerEngine {
 		}
 
 		this.breakDurationMs = 0;
+		this.baseBreakDurationMs = 0;
 		this.accumulatedBreakMs = 0;
 		this.breakExtended = false;
 		this.workLimitNotified = false;

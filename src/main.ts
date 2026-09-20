@@ -15,7 +15,13 @@ import { TimerEngine } from './timer';
 import { TimerView, TIMER_VIEW_TYPE } from './view';
 import { renderHeatmap } from './heatmap';
 import { formatLocalDate, rollingYearWindow } from './utils';
-import { DateRange, getDateRangesToSync, mergeDateRanges, SerializedSaveQueue } from './persistence';
+import {
+	DateRange,
+	getDateRangesToSync,
+	hasRecordsMissingFromDisk,
+	mergeDateRanges,
+	SerializedSaveQueue,
+} from './persistence';
 import { removeTaskTree } from './task-cache';
 import { parseCompletionSyncRecord, parseSessionSyncRecord, parseWorkoutSyncRecord } from './sync-records';
 import { reorderTaskIds, TaskDropPlacement, updateStoredTaskOrder } from './task-order';
@@ -288,7 +294,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		});
 	}
 
-	// --- Immutable records: conflict-safe transport for cross-device data ---
+	// --- Immutable local recovery records ---
 
 	private async ensureDir(dirPath: string): Promise<void> {
 		const parts = dirPath.split('/');
@@ -345,7 +351,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		const completionsDir = `${this.manifest.dir}/pending/completions`;
 		const workoutsDir = `${this.manifest.dir}/pending/workouts`;
 
-		// Records stay on disk so every device can eventually receive them.
+		// Records stay on this device so a synced data.json overwrite can be repaired.
 		try {
 			if (await this.app.vault.adapter.exists(sessionsDir)) {
 				const listing = await this.app.vault.adapter.list(sessionsDir);
@@ -919,7 +925,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		} catch (err) {
 			console.error('Mikumodoro: Failed to read data.json from disk', err);
+			return;
 		}
+		if (!rawData) return;
 		let data: {
 			sessions?: PomodoroSession[];
 			completions?: CompletionMap;
@@ -933,19 +941,16 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			data = (rawData ? JSON.parse(rawData) : {}) as typeof data;
 		} catch (err) {
 			console.error('Mikumodoro: Failed to parse data.json', err);
-			data = {};
+			return;
 		}
 		if (!data) return;
 		let changed = false;
 
 		// --- Sessions: merge by ID, works even during active timer ---
-		if (data.sessions && Array.isArray(data.sessions)) {
-			const currentSessions = this.timerEngine.getSessions();
-			const currentIds = new Set(currentSessions.map(s => s.id));
-			const newSessions = data.sessions.filter((s: PomodoroSession) => !currentIds.has(s.id));
-			if (newSessions.length > 0) {
-				// Use merge (safe during active timer) instead of load (which replaces)
-				this.timerEngine.mergeSessions(data.sessions);
+		if (Array.isArray(data.sessions)) {
+			// Merge is safe during an active timer because it does not replace timer state.
+			changed = this.timerEngine.mergeSessions(data.sessions) || changed;
+			if (hasRecordsMissingFromDisk(this.timerEngine.getSessions(), data.sessions, session => session.id)) {
 				changed = true;
 			}
 		}
@@ -965,6 +970,13 @@ export default class MikumodoroTimerPlugin extends Plugin {
 						this.completionMap[dateStr].push(rec);
 						changed = true;
 					}
+				}
+			}
+			for (const [dateStr, localRecords] of Object.entries(this.completionMap)) {
+				const diskTaskIds = new Set((diskCompletions[dateStr] ?? []).map(record => record.taskId));
+				if (localRecords.some(record => !diskTaskIds.has(record.taskId))) {
+					changed = true;
+					break;
 				}
 			}
 		}
@@ -990,6 +1002,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 					changed = true;
 				}
 			}
+			if (this.customActivityLabels.some(label => !diskLabels.includes(label))) {
+				changed = true;
+			}
 		}
 
 		if (Array.isArray(data.taskOrder)) {
@@ -1009,6 +1024,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 					changed = true;
 				}
 			}
+			if (hasRecordsMissingFromDisk(this.workouts, data.workouts, record => record.id)) {
+				changed = true;
+			}
 		}
 
 		if (Array.isArray(data.completionHistoryCoverage)) {
@@ -1022,7 +1040,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			}
 		}
 
-		// Also merge immutable records synced from other devices.
+		// Restore anything present only in this device's recovery journal.
 		if (await this.mergeSyncRecords()) {
 			changed = true;
 		}
@@ -1034,6 +1052,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			// aren't lost on the next save from this device
 			this.scheduleSave(1000);
 		}
+	}
+
+	async onExternalSettingsChange(): Promise<void> {
+		await this.reloadFromDisk();
 	}
 
 	refreshViews() {

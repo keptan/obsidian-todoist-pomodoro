@@ -32,6 +32,15 @@ export interface DateRange {
 	end: string;
 }
 
+export function hasRecordsMissingFromDisk<T>(
+	localRecords: T[],
+	diskRecords: T[],
+	getId: (record: T) => string,
+): boolean {
+	const diskIds = new Set(diskRecords.map(getId));
+	return localRecords.some(record => !diskIds.has(getId(record)));
+}
+
 export function mergeDateRanges(ranges: DateRange[]): DateRange[] {
 	const sorted = ranges
 		.filter(range => range.start < range.end)
