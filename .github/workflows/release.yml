@@ -21,9 +21,27 @@ jobs:
                   node-version: 24
                   cache: 'npm'
 
+            - name: Validate release version
+              env:
+                  RELEASE_TAG: ${{ github.ref_name }}
+              run: |
+                  node --input-type=module <<'JS'
+                  import fs from 'node:fs';
+                  const read = path => JSON.parse(fs.readFileSync(path, 'utf8'));
+                  const manifest = read('manifest.json');
+                  const lock = read('package-lock.json');
+                  const tag = process.env.RELEASE_TAG;
+                  if (!/^\d+\.\d+\.\d+$/.test(tag) || [manifest.version, read('package.json').version, lock.version, lock.packages[''].version].some(version => version !== tag)) {
+                    throw new Error('Release tag must match manifest and package versions without a leading v.');
+                  }
+                  if (read('versions.json')[tag] !== manifest.minAppVersion) throw new Error('Missing or mismatched versions.json entry.');
+                  JS
+
             - name: Build plugin
               run: |
                   npm ci
+                  npm test
+                  npm run lint
                   npm run build
 
             - name: Check for optional styles
@@ -43,7 +61,14 @@ jobs:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               run: |
                   tag="${GITHUB_REF#refs/tags/}"
+                  notes_file="release-notes/$tag.md"
+                  if [ -f "$notes_file" ]; then
+                    notes=(--notes-file "$notes_file")
+                  else
+                    notes=(--generate-notes)
+                  fi
 
                   gh release create "$tag" \
                     --title="$tag" \
+                    --verify-tag --latest "${notes[@]}" \
                     main.js manifest.json ${{ steps.styles.outputs.exists == 'true' && 'styles.css' || '' }}

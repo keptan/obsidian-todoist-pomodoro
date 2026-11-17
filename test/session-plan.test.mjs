@@ -1,0 +1,68 @@
+import { strict as assert } from 'node:assert';
+import { defaultSessionPlan, positionForTotal, splitSessionPlan, totalMinutesAt } from '../src/session-plan.ts';
+import { DEFAULT_SETTINGS } from '../src/types.ts';
+import { TimerEngine } from '../src/timer.ts';
+
+assert.deepEqual(defaultSessionPlan(DEFAULT_SETTINGS), { workMinutes: 25, restMinutes: 5 });
+assert.deepEqual(defaultSessionPlan({ ...DEFAULT_SETTINGS, breakRatio: 10 }), { workMinutes: 25, restMinutes: 2.5 }, 'preserve configured defaults including fractional rest minutes');
+assert.equal(totalMinutesAt(0), 5);
+assert.equal(totalMinutesAt(1), 120);
+assert.equal(totalMinutesAt(-1), 5);
+assert.equal(totalMinutesAt(2), 120);
+assert.ok(totalMinutesAt(0.5) < (5 + 120) / 2, 'nonlinear scale leaves more room for shorter sessions');
+for (const total of [5, 10, 30, 60, 120]) assert.equal(totalMinutesAt(positionForTotal(total)), total);
+assert.deepEqual(splitSessionPlan(60, 0.75), { workMinutes: 45, restMinutes: 15 });
+assert.deepEqual(splitSessionPlan(5, 1), { workMinutes: 4, restMinutes: 1 });
+assert.deepEqual(splitSessionPlan(5, 0), { workMinutes: 1, restMinutes: 4 });
+const longDefaults = defaultSessionPlan({ ...DEFAULT_SETTINGS, defaultWorkMinutes: 200 });
+assert.equal(longDefaults.workMinutes + longDefaults.restMinutes, 120);
+
+const oldNow = Date.now;
+const oldWindow = globalThis.window;
+let now = 1000000;
+Date.now = () => now;
+globalThis.window = { setInterval: () => 1, clearInterval: () => {} };
+try {
+	const settings = { ...DEFAULT_SETTINGS };
+	const engine = new TimerEngine(settings);
+	const task = { id: 'task', content: 'Work' };
+	let reminders = 0;
+	let starts = 0;
+	engine.setOnWorkLimitReached(() => reminders++);
+	engine.setOnWorkStart(() => starts++);
+	const plan = { workMinutes: 10, restMinutes: 5 };
+	engine.startWork(task, plan);
+	plan.workMinutes = 999;
+	now += 9 * 60000;
+	engine.tick();
+	assert.equal(reminders, 0);
+	now += 60000;
+	engine.tick();
+	assert.equal(reminders, 1, 'use selected work target instead of the default 25m');
+	assert.equal(engine.getState().mode, 'working', 'retain the existing reminder/keep-working behavior');
+	engine.startBreak();
+	assert.equal(engine.getBreakRemainingMs(), 5 * 60000, '10m work produces the selected 5m rest');
+	now += 2 * 60000;
+	engine.pause();
+	now += 10 * 60000;
+	engine.resume();
+	assert.equal(engine.getBreakRemainingMs(), 3 * 60000, 'pause preserves the selected break duration');
+	engine.stop();
+	engine.startWork(task, { workMinutes: 20, restMinutes: 10 });
+	now += 10 * 60000;
+	engine.pause();
+	now += 15 * 60000;
+	engine.startBreak();
+	assert.equal(engine.getBreakRemainingMs(), 5 * 60000, 'early work completion uses selected ratio and excludes paused time');
+	engine.stop();
+	engine.startWork(task);
+	assert.deepEqual(engine.getSessionPlan(), { workMinutes: 25, restMinutes: 5 }, 'new sessions reset to defaults');
+	assert.deepEqual(settings, DEFAULT_SETTINGS, 'session choices do not change saved defaults');
+	engine.startWork(task, { workMinutes: NaN, restMinutes: 0 });
+	assert.deepEqual(engine.getSessionPlan(), { workMinutes: 25, restMinutes: 5 });
+	assert.equal(starts, 4, 'capture recency on each start before a session has been recorded');
+	engine.destroy();
+} finally {
+	Date.now = oldNow;
+	globalThis.window = oldWindow;
+}

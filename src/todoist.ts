@@ -8,6 +8,14 @@ interface PaginatedResponse<T> {
 	next_cursor: string | null;
 }
 
+interface CompletedTask {
+	task_id: string;
+	content: string;
+	completed_at: string;
+	project_id: string;
+	parent_id: string | null;
+}
+
 export class TodoistClient {
 	private token: string;
 
@@ -84,9 +92,9 @@ export class TodoistClient {
 	}
 
 	/** Fetch completed tasks within Todoist's maximum three-month date window. */
-	async getCompletedTasks(since: Date, until: Date): Promise<Array<{ task_id: string; content: string; completed_at: string; project_id: string }>> {
+	async getCompletedTasks(since: Date, until: Date): Promise<CompletedTask[]> {
 		if (!this.token) return [];
-		const completed: Array<{ task_id: string; content: string; completed_at: string; project_id: string }> = [];
+		const completed: CompletedTask[] = [];
 		let cursor: string | null = null;
 		do {
 			const params = new URLSearchParams({
@@ -101,7 +109,7 @@ export class TodoistClient {
 				headers: { 'Authorization': `Bearer ${this.token}` },
 			});
 			const data = response.json as {
-				items?: Array<{ id: string; content: string; completed_at?: string; project_id?: string; is_deleted?: boolean }>;
+				items?: Array<{ id: string; content: string; completed_at?: string; project_id?: string; parent_id?: string | null; is_deleted?: boolean }>;
 				next_cursor?: string | null;
 			};
 			for (const item of data.items ?? []) {
@@ -111,6 +119,7 @@ export class TodoistClient {
 					content: item.content,
 					completed_at: item.completed_at,
 					project_id: item.project_id ?? '',
+					parent_id: item.parent_id ?? null,
 				});
 			}
 			cursor = data.next_cursor ?? null;

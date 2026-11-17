@@ -3,6 +3,13 @@ import type MikumodoroTimerPlugin from './main';
 import type { TodoistTask, TimerState } from './types';
 import { formatTimerDisplay, formatLocalDate, formatMinutes, getSessionDateKey } from './utils';
 import { sortTasksByViewOrder, TaskDropPlacement } from './task-order';
+import { buildTaskDates, closestTaskDate } from './task-dates';
+import type { TaskDate } from './task-dates';
+import { formatTaskTime, renderTaskSummaryBadges } from './ui/task-summary-badges';
+import type { TaskSummary } from './task-summary';
+import { groupTasksByProject } from './task-groups';
+import { ActivityTrackerModal } from './ui/activity-tracker-modal';
+import { ActivityInput } from './ui/activity-input';
 
 export const TIMER_VIEW_TYPE = 'obsidian-todoist-pomodoro-view';
 
@@ -20,6 +27,8 @@ export class TimerView extends ItemView {
 	private draggedOrderId: string | null = null;
 	private dropTargetOrderId: string | null = null;
 	private dropPlacement: TaskDropPlacement = 'before';
+	private taskDates = new Map<string, TaskDate | null>();
+	private taskSummaries = new Map<string, TaskSummary>();
 
 	constructor(leaf: WorkspaceLeaf, plugin: MikumodoroTimerPlugin) {
 		super(leaf);
@@ -186,7 +195,7 @@ export class TimerView extends ItemView {
 				if (!task) {
 					this.openTaskPicker();
 				} else {
-					this.plugin.timerEngine.startWork(task);
+					new ActivityTrackerModal(this.plugin, task).open();
 				}
 			});
 
@@ -277,6 +286,9 @@ export class TimerView extends ItemView {
 
 	private renderTaskSelector(container: HTMLElement) {
 		const tasks = this.plugin.getCachedTasks();
+		this.taskDates = buildTaskDates(tasks);
+		const summaries = this.plugin.getTaskSummaries();
+		this.taskSummaries = summaries.byTask;
 		if (tasks.length === 0) {
 			container.createDiv({
 				cls: 'mikumodoro-no-tasks',
@@ -316,44 +328,7 @@ export class TimerView extends ItemView {
 
 		const listEl = sectionEl.createDiv({ cls: 'mikumodoro-task-list' });
 
-		// Group tasks: project tasks by project_id, standalone top-level tasks separately
-		const projectGroups = new Map<string, { projectName: string; tasks: TodoistTask[] }>();
-		const standaloneTasks: TodoistTask[] = [];
-
-		for (const task of tasks) {
-			const isInbox = task.project_name === 'Inbox';
-			if (task.project_id && !isInbox && !task.parent_id) {
-				// Real project, top-level task
-				if (!projectGroups.has(task.project_id)) {
-					projectGroups.set(task.project_id, {
-						projectName: task.project_name || task.project_id,
-						tasks: [],
-					});
-				}
-				projectGroups.get(task.project_id)!.tasks.push(task);
-			} else if (task.parent_id) {
-				// Subtask: route to same group as parent
-				const parent = tasks.find(t => t.id === task.parent_id);
-				if (!parent) continue;
-				const parentIsInbox = parent.project_name === 'Inbox';
-				const parentIsStandalone = !parent.project_id || parentIsInbox;
-				if (parentIsStandalone) {
-					// Parent is standalone/inbox, ensure parent is in standaloneTasks
-					if (!standaloneTasks.includes(parent)) {
-						standaloneTasks.push(parent);
-					}
-				} else if (parent.project_id) {
-					// Parent is in a real project, add subtask to that group
-					const grp = projectGroups.get(parent.project_id);
-					if (grp && !grp.tasks.includes(task)) {
-						grp.tasks.push(task);
-					}
-				}
-			} else {
-				// Top-level task with no project or inbox = standalone
-				standaloneTasks.push(task);
-			}
-		}
+		const { projectGroups, standaloneTasks } = groupTasksByProject(tasks);
 
 		// Unordered projects remain alphabetical; dragged projects use the same
 		// local-only order store as tasks under namespaced IDs.
@@ -396,7 +371,9 @@ export class TimerView extends ItemView {
 			const projectArrow = projectHeader.createSpan({ cls: 'mikumodoro-project-arrow' });
 			projectArrow.setText('▾');
 			projectHeader.createSpan({ text: group.projectName, cls: 'mikumodoro-project-name' });
-			projectHeader.createSpan({ cls: 'mikumodoro-project-count', text: String(topLevelTasks.length) });
+			renderTaskSummaryBadges(projectHeader,
+				closestTaskDate(group.tasks.map(task => this.taskDates.get(task.id))),
+				summaries.byProject.get(projectId), true);
 
 			// Header action buttons
 			const headerActions = projectHeader.createDiv({ cls: 'mikumodoro-header-actions' });
@@ -652,22 +629,7 @@ export class TimerView extends ItemView {
 			priorityEl.classList.add(`priority-${task.priority}`);
 		}
 
-		// Due date
-		if (task.due) {
-			const dueEl = item.createSpan({ cls: 'mikumodoro-task-item-due' });
-			dueEl.setText(task.due.string);
-		}
-
-		// Time spent (include subtask time for top-level tasks)
-		const taskMinutes = depth === 0
-			? this.plugin.getTaskMinutesWithSubtasks(task.id)
-			: this.plugin.getTaskMinutes(task.id);
-		if (taskMinutes > 0) {
-			item.createSpan({
-				text: formatTaskTime(taskMinutes),
-				cls: 'mikumodoro-task-item-time',
-			});
-		}
+		renderTaskSummaryBadges(item, this.taskDates.get(task.id) ?? null, this.taskSummaries.get(task.id));
 
 		// Clicking the selected task clears it. Otherwise, the first click on a
 		// collapsed parent reveals its subtasks and the next click selects it.
@@ -802,11 +764,7 @@ export class TimerView extends ItemView {
 			});
 		}
 
-		// Time spent (include subtask time for top-level tasks)
-		const isTopLevel = !task.parent_id;
-		const taskMinutes = isTopLevel
-			? this.plugin.getTaskMinutesWithSubtasks(task.id)
-			: this.plugin.getTaskMinutes(task.id);
+		const taskMinutes = this.taskSummaries.get(task.id)?.totalMinutes ?? 0;
 		if (taskMinutes > 0) {
 			const timeEl = detail.createDiv({ cls: 'mikumodoro-detail-row' });
 			timeEl.createSpan({ cls: 'mikumodoro-detail-label', text: 'Time spent' });
@@ -991,112 +949,7 @@ export class TimerView extends ItemView {
 	}
 
 	private openTaskPicker() {
-		const modal = new Modal(this.app);
-		modal.titleEl.setText('Pick a task');
-
-		const inputEl = modal.contentEl.createEl('input', {
-			type: 'text',
-			placeholder: 'Search tasks or type a custom activity...',
-			cls: 'mikumodoro-modal-input',
-		});
-
-		const suggestionsEl = modal.contentEl.createDiv({ cls: 'mikumodoro-modal-suggestions' });
-		suggestionsEl.classList.add('mikumodoro-modal-suggestions-limited');
-
-		const todoistTasks = this.plugin.getCachedTasks();
-		const customLabels = this.plugin.getCustomActivityLabels();
-
-		const renderSuggestions = (filter: string) => {
-			suggestionsEl.empty();
-			const q = filter.toLowerCase();
-
-			// Custom activities section
-			const customMatched = customLabels
-				.filter(l => l.toLowerCase().includes(q))
-				.slice(0, 5);
-
-			// Todoist tasks section
-			const taskMatched = todoistTasks
-				.filter(t => t.content.toLowerCase().includes(q))
-				.slice(0, 15);
-
-			if (customMatched.length > 0) {
-				suggestionsEl.createDiv({
-					cls: 'mikumodoro-modal-suggestion-header',
-					text: 'Recent Activities',
-				});
-				for (const label of customMatched) {
-					const item = suggestionsEl.createDiv({
-						cls: 'mikumodoro-modal-suggestion-item',
-						text: '\u26a1 ' + label,
-					});
-					item.addEventListener('click', () => {
-						void this.plugin.trackCustomActivity(label);
-						modal.close();
-						this.render();
-					});
-				}
-			}
-
-			if (taskMatched.length > 0) {
-				suggestionsEl.createDiv({
-					cls: 'mikumodoro-modal-suggestion-header',
-					text: 'Todoist Tasks',
-				});
-				for (const task of taskMatched) {
-					const item = suggestionsEl.createDiv({
-						cls: 'mikumodoro-modal-suggestion-item',
-						text: task.content,
-					});
-					if (task.project_name && task.project_name !== 'Inbox') {
-						item.createSpan({
-							cls: 'mikumodoro-modal-suggestion-project',
-							text: ' ' + task.project_name,
-						});
-					}
-					item.addEventListener('click', () => {
-						this.plugin.setSelectedTask(task);
-						this.plugin.timerEngine.startWork(task);
-						modal.close();
-						this.render();
-					});
-				}
-			}
-
-			if (customMatched.length === 0 && taskMatched.length === 0 && filter.trim()) {
-				suggestionsEl.createDiv({
-					cls: 'mikumodoro-modal-suggestion-item',
-					text: '\u26a1 Start custom: "' + filter.trim() + '"',
-					attr: { style: 'color:var(--interactive-accent);' },
-				}).addEventListener('click', () => {
-					void this.plugin.trackCustomActivity(filter.trim());
-					modal.close();
-					this.render();
-				});
-			}
-		};
-
-		inputEl.addEventListener('input', () => renderSuggestions(inputEl.value.trim()));
-		inputEl.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter') {
-				const val = inputEl.value.trim();
-				if (!val) return;
-				// Try exact todoist match first
-				const match = todoistTasks.find(t => t.content.toLowerCase() === val.toLowerCase());
-				if (match) {
-					this.plugin.setSelectedTask(match);
-					this.plugin.timerEngine.startWork(match);
-				} else {
-					void this.plugin.trackCustomActivity(val);
-				}
-				modal.close();
-				this.render();
-			}
-		});
-
-		renderSuggestions('');
-		inputEl.focus();
-		modal.open();
+		new ActivityTrackerModal(this.plugin).open();
 	}
 
 	private renderBottomActions(container: HTMLElement) {
@@ -1116,70 +969,7 @@ export class TimerView extends ItemView {
 	}
 
 	private openActivityTracker() {
-		const modal = new Modal(this.app);
-		modal.titleEl.setText('Track activity');
-
-		modal.contentEl.createEl('p', {
-			text: 'Start a pomodoro for something outside your todoist tasks:',
-			cls: 'mikumodoro-modal-desc',
-		});
-
-		const inputEl = modal.contentEl.createEl('input', {
-			type: 'text',
-			placeholder: 'Activity name...',
-			cls: 'mikumodoro-modal-input',
-		});
-
-		const suggestionsEl = modal.contentEl.createDiv({ cls: 'mikumodoro-modal-suggestions' });
-
-		const allLabels = this.plugin.getCustomActivityLabels();
-		const renderSuggestions = (filter: string) => {
-			suggestionsEl.empty();
-			const filtered = allLabels
-				.filter(l => l.toLowerCase().includes(filter.toLowerCase()))
-				.slice(0, 8);
-			for (const label of filtered) {
-				const item = suggestionsEl.createDiv({
-					cls: 'mikumodoro-modal-suggestion-item',
-					text: label,
-				});
-				item.addEventListener('click', () => {
-					inputEl.value = label;
-					suggestionsEl.empty();
-					inputEl.focus();
-				});
-			}
-		};
-
-		inputEl.addEventListener('input', () => renderSuggestions(inputEl.value.trim()));
-		renderSuggestions('');
-
-		inputEl.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter') {
-				const label = inputEl.value.trim();
-				if (label) {
-					void this.plugin.trackCustomActivity(label);
-					modal.close();
-					this.render();
-				}
-			}
-		});
-
-		const startBtn = modal.contentEl.createEl('button', {
-			cls: 'mikumodoro-btn mikumodoro-btn-primary',
-			text: 'Start',
-		});
-		startBtn.addEventListener('click', () => {
-			const label = inputEl.value.trim();
-			if (label) {
-				void this.plugin.trackCustomActivity(label);
-				modal.close();
-				this.render();
-			}
-		});
-
-		inputEl.focus();
-		modal.open();
+		new ActivityTrackerModal(this.plugin).open();
 	}
 
 	private createWorkoutFields(container: HTMLElement): {
@@ -1282,34 +1072,11 @@ export class TimerView extends ItemView {
 			cls: 'mikumodoro-modal-desc',
 		});
 
-		const inputEl = modal.contentEl.createEl('input', {
-			type: 'text',
-			placeholder: 'What did you do?',
-			cls: 'mikumodoro-modal-input',
-		});
-
-		const suggestionsEl = modal.contentEl.createDiv({ cls: 'mikumodoro-modal-suggestions' });
-		const allLabels = this.plugin.getCustomActivityLabels();
-
-		const renderSuggestions = (filter: string) => {
-			suggestionsEl.empty();
-			const filtered = allLabels
-				.filter(l => l.toLowerCase().includes(filter.toLowerCase()))
-				.slice(0, 8);
-			for (const label of filtered) {
-				const item = suggestionsEl.createDiv({
-					cls: 'mikumodoro-modal-suggestion-item',
-					text: label,
-				});
-				item.addEventListener('click', () => {
-					inputEl.value = label;
-					suggestionsEl.empty();
-				});
-			}
-		};
-
-		inputEl.addEventListener('input', () => renderSuggestions(inputEl.value.trim()));
-		renderSuggestions('');
+		const activityInput = new ActivityInput(modal.contentEl, this.plugin.getActivitySuggestions());
+		activityInput.load();
+		modal.onClose = () => activityInput.unload();
+		this.plugin.register(() => modal.close());
+		const inputEl = activityInput.input;
 
 		const durationArea = modal.contentEl.createDiv({ cls: 'mikumodoro-log-duration-area' });
 		durationArea.createEl('label', { text: 'Duration', cls: 'mikumodoro-log-label' });
@@ -1375,7 +1142,7 @@ export class TimerView extends ItemView {
 			const minutes = parseInt(slider.value);
 			const dateStr = dateInput.value || todayStr;
 			const sessionDate = currentTimeInput.checked ? new Date() : new Date(dateStr + 'T12:00:00');
-			await this.plugin.addManualLog(label, minutes, sessionDate, pushUps, pullUps, dips);
+			await this.plugin.addManualLog(label, minutes, sessionDate, pushUps, pullUps, dips, activityInput.getSelection()?.task);
 			const logged: string[] = [];
 			if (label) logged.push(`${minutes}m for "${label}"`);
 			if (pushUps > 0) logged.push(`${pushUps} push-ups`);
@@ -1485,11 +1252,4 @@ export class TimerView extends ItemView {
 		for (const cleanup of this.resizeCleanups) cleanup();
 		this.resizeCleanups = [];
 	}
-}
-
-function formatTaskTime(minutes: number): string {
-	const h = Math.floor(minutes / 60);
-	const m = minutes % 60;
-	if (h > 0) return `${h}h ${m}m`;
-	return `${m}m`;
 }

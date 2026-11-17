@@ -8,6 +8,7 @@ import {
 	CompletionMap,
 	CompletionRecord,
 	WorkoutRecord,
+	SessionPlan,
 } from './types';
 import { MikumodoroSettingTab } from './settings';
 import { TodoistClient } from './todoist';
@@ -25,6 +26,8 @@ import {
 import { removeTaskTree } from './task-cache';
 import { parseCompletionSyncRecord, parseSessionSyncRecord, parseWorkoutSyncRecord } from './sync-records';
 import { reorderTaskIds, TaskDropPlacement, updateStoredTaskOrder } from './task-order';
+import { TaskHistory, TaskHistoryData } from './task-summary';
+import { activityKey, ActivityRecency, buildActivitySuggestions, mergeActivityRecency } from './activity-suggestions';
 
 export default class MikumodoroTimerPlugin extends Plugin {
 	settings!: MikumodoroSettings;
@@ -32,12 +35,14 @@ export default class MikumodoroTimerPlugin extends Plugin {
 	timerEngine!: TimerEngine;
 	todoistConnected = false;
 	private cachedTasks: TodoistTask[] = [];
+	private taskHistory = new TaskHistory();
 	private selectedTask: TodoistTask | null = null;
 	private taskNoteMap: TaskNoteMap = {};
 	private completionMap: CompletionMap = {};
 	private completionHistoryCoverage: DateRange[] = [];
 	private completionHistoryLoads = new Map<string, Promise<boolean>>();
 	private customActivityLabels: string[] = [];
+	private activityRecency: ActivityRecency = {};
 	private taskOrder: string[] = [];
 	private workouts: WorkoutRecord[] = [];
 	private heatmapElements: Set<HTMLElement> = new Set();
@@ -72,6 +77,8 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			completions?: CompletionMap;
 			customActivityLabels?: string[];
 			taskOrder?: string[];
+			taskHistory?: TaskHistoryData;
+			activityRecency?: ActivityRecency;
 			workouts?: WorkoutRecord[];
 			completionHistoryCoverage?: DateRange[];
 		};
@@ -96,6 +103,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		if (Array.isArray(savedData?.completionHistoryCoverage)) {
 			this.completionHistoryCoverage = mergeDateRanges(savedData.completionHistoryCoverage);
 		}
+		this.taskHistory = new TaskHistory(savedData?.taskHistory);
+		this.activityRecency = mergeActivityRecency({}, savedData?.activityRecency);
+		// Older history imports discarded ancestry. Fetch it once during migration.
+		if (!savedData?.taskHistory) this.completionHistoryCoverage = [];
 
 		// Merge immutable sync records from this and other devices.
 		if (await this.mergeSyncRecords()) {
@@ -103,11 +114,16 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 
 		// Save sessions when one completes
+		this.timerEngine.setOnWorkStart(task => {
+			this.activityRecency[activityKey(task)] = Date.now();
+			this.scheduleSave(1000);
+		});
 		this.timerEngine.setOnSessionComplete((session) => {
 			void this.persistSession(session).catch(err => {
 				console.error('Mikumodoro: Failed to save completed session', err);
 			});
 			this.refreshHeatmaps();
+			this.refreshViews();
 		});
 
 		this.timerEngine.setOnWorkLimitReached(() => {
@@ -225,9 +241,13 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			void this.reloadFromDisk();
 		}, 60000));
 
-		// Populate the default rolling year. Older periods load on navigation.
+		// Include recorded sessions so completed descendants retain their time totals.
 		if (this.settings.todoistApiToken) {
-			void this.ensureCompletionHistoryForRollingYear(new Date().getFullYear()).catch(err => {
+			const { start } = rollingYearWindow(new Date().getFullYear());
+			const earliest = this.timerEngine.getSessions().reduce((time, session) => Math.min(time, session.startTime), start.getTime());
+			const end = new Date();
+			end.setDate(end.getDate() + 1);
+			void this.ensureCompletionHistoryRange(new Date(earliest), end).catch(err => {
 				console.error('Mikumodoro: Boot history sync failed', err);
 			});
 		}
@@ -287,7 +307,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				taskNotes: this.taskNoteMap,
 				completions: this.completionMap,
 				customActivityLabels: this.customActivityLabels,
+				activityRecency: this.activityRecency,
 				taskOrder: this.taskOrder,
+				taskHistory: this.taskHistory.serialize(),
 				workouts: this.workouts,
 				completionHistoryCoverage: this.completionHistoryCoverage,
 			});
@@ -458,6 +480,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		return this.cachedTasks;
 	}
 
+	getTaskSummaries() {
+		return this.taskHistory.summarize(this.cachedTasks, this.timerEngine.getSessions());
+	}
+
 	getTaskOrder(): string[] {
 		return this.taskOrder;
 	}
@@ -507,6 +533,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				...t,
 				project_name: projects[t.project_id],
 			}));
+			if (this.taskHistory.remember(this.cachedTasks)) this.scheduleSave(1000);
 			this.todoistConnected = true;
 			this.refreshHeatmaps();
 			return true;
@@ -529,8 +556,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				...t,
 				project_name: projects[t.project_id],
 			}));
+			if (this.taskHistory.remember(this.cachedTasks)) this.scheduleSave(1000);
 			this.todoistConnected = true;
 			this.refreshHeatmaps();
+			this.refreshViews();
 		} catch (err) {
 			console.error('Mikumodoro: Failed to fetch Todoist tasks', err);
 			this.todoistConnected = false;
@@ -623,6 +652,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			if (changed || JSON.stringify(this.completionHistoryCoverage) !== previousCoverage) {
 				await this.savePluginData();
 			}
+			if (changed) this.refreshViews();
 			return changed;
 		})();
 		this.completionHistoryLoads.set(key, load);
@@ -644,6 +674,9 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				chunkStart = chunkEnd;
 			}
 			for (const item of completed) {
+				changed = this.taskHistory.remember([{
+					id: item.task_id, parent_id: item.parent_id, project_id: item.project_id,
+				}], new Date(item.completed_at).getTime()) || changed;
 				const dateStr = formatLocalDate(new Date(item.completed_at));
 				if (!this.completionMap[dateStr]) {
 					this.completionMap[dateStr] = [];
@@ -679,11 +712,15 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		return this.customActivityLabels;
 	}
 
+	getActivitySuggestions() {
+		return buildActivitySuggestions(this.cachedTasks, this.customActivityLabels, this.timerEngine.getSessions(), this.activityRecency);
+	}
+
 	getWorkoutRecords(): WorkoutRecord[] {
 		return [...this.workouts];
 	}
 
-	async trackCustomActivity(label: string) {
+	async trackCustomActivity(label: string, plan?: SessionPlan) {
 		const fakeTask: TodoistTask = {
 			id: `custom:${label}:${Date.now()}`,
 			content: label,
@@ -694,16 +731,16 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		if (!this.customActivityLabels.includes(label)) {
 			this.customActivityLabels.push(label);
 		}
-		this.timerEngine.startWork(fakeTask);
+		this.timerEngine.startWork(fakeTask, plan);
 		await this.savePluginData();
 	}
 
-	async addManualLog(label: string, durationMinutes: number, date: Date, pushUps: number, pullUps: number, dips: number) {
+	async addManualLog(label: string, durationMinutes: number, date: Date, pushUps: number, pullUps: number, dips: number, task?: TodoistTask) {
 		if (label) {
 			const session: PomodoroSession = {
 				id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-				taskId: `custom:${label}`,
-				taskContent: label,
+				taskId: task?.id ?? `custom:${label}`,
+				taskContent: task?.content ?? label,
 				startTime: date.getTime(),
 				endTime: date.getTime() + durationMinutes * 60000,
 				durationMinutes,
@@ -711,9 +748,10 @@ export default class MikumodoroTimerPlugin extends Plugin {
 				dateKey: formatLocalDate(date),
 			};
 			this.timerEngine.mergeSessions([session]);
-			if (!this.customActivityLabels.includes(label)) {
+			if (!task && !this.customActivityLabels.includes(label)) {
 				this.customActivityLabels.push(label);
 			}
+			if (task) this.taskHistory.remember([task]);
 			try {
 				await this.writeSessionRecord(session);
 			} catch (err) {
@@ -762,21 +800,7 @@ export default class MikumodoroTimerPlugin extends Plugin {
 
 	// Get task minutes including all subtasks (recursively)
 	getTaskMinutesWithSubtasks(taskId: string): number {
-		const allIds = [taskId, ...this.collectSubtaskIds(taskId)];
-		return this.timerEngine
-			.getSessions()
-			.filter((s) => allIds.includes(s.taskId))
-			.reduce((sum, s) => sum + s.durationMinutes, 0);
-	}
-
-	private collectSubtaskIds(parentId: string): string[] {
-		const result: string[] = [];
-		const directChildren = this.cachedTasks.filter(t => t.parent_id === parentId);
-		for (const child of directChildren) {
-			result.push(child.id);
-			result.push(...this.collectSubtaskIds(child.id));
-		}
-		return result;
+		return this.getTaskSummaries().byTask.get(taskId)?.totalMinutes ?? 0;
 	}
 
 	// Resolve a task ID to its top-level parent's content name
@@ -934,6 +958,8 @@ export default class MikumodoroTimerPlugin extends Plugin {
 			taskNotes?: TaskNoteMap;
 			customActivityLabels?: string[];
 			taskOrder?: string[];
+			taskHistory?: TaskHistoryData;
+			activityRecency?: ActivityRecency;
 			workouts?: WorkoutRecord[];
 			completionHistoryCoverage?: DateRange[];
 		};
@@ -945,6 +971,15 @@ export default class MikumodoroTimerPlugin extends Plugin {
 		}
 		if (!data) return;
 		let changed = false;
+		const mergedRecency = mergeActivityRecency(this.activityRecency, data.activityRecency);
+		const diskRecency = mergeActivityRecency({}, data.activityRecency);
+		if (Object.entries(mergedRecency).some(([key, time]) => this.activityRecency[key] !== time || diskRecency[key] !== time)) {
+			this.activityRecency = mergedRecency;
+			changed = true;
+		}
+		changed = this.taskHistory.merge(data.taskHistory) || changed;
+		const diskHistory = new TaskHistory(data.taskHistory).serialize();
+		if (Object.entries(this.taskHistory.serialize()).some(([id, link]) => !diskHistory[id] || diskHistory[id].updatedAt < link.updatedAt)) changed = true;
 
 		// --- Sessions: merge by ID, works even during active timer ---
 		if (Array.isArray(data.sessions)) {

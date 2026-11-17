@@ -72,6 +72,11 @@ export interface TimerState {
 	pausedAt: number | null;
 }
 
+export interface SessionPlan {
+	workMinutes: number;
+	restMinutes: number;
+}
+
 // Note links: taskId -> obsidian note path
 export type TaskNoteMap = Record<string, string>;
 

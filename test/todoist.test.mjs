@@ -26,7 +26,7 @@ const responses = [
 		next_cursor: 'next-page',
 	},
 	{
-		items: [{ id: 'subtask', content: 'Completed child', completed_at: '2026-08-12T12:05:00Z', project_id: 'project' }],
+		items: [{ id: 'subtask', content: 'Completed child', completed_at: '2026-08-12T12:05:00Z', project_id: 'project', parent_id: 'root-task' }],
 		next_cursor: null,
 	},
 ];
@@ -41,6 +41,8 @@ const completed = await client.getCompletedTasks(
 	new Date('2026-09-01T00:00:00Z'),
 );
 assert.deepEqual(completed.map(task => task.task_id), ['root-task', 'subtask']);
+assert.equal(completed[0].parent_id, null);
+assert.equal(completed[1].parent_id, 'root-task', 'retain completed ancestry for total-time rollups');
 assert.match(historyRequests[0].url, /tasks\/completed\/by_completion_date\?/);
 assert.match(historyRequests[0].url, /since=2026-08-01T00%3A00%3A00.000Z/);
 assert.match(historyRequests[0].url, /until=2026-09-01T00%3A00%3A00.000Z/);

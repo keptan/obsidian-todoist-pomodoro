@@ -1,5 +1,107 @@
 /* Mikumodoro Timer Plugin Styles */
 
+.mikumodoro-activity-suggestion {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	width: 100%;
+	height: auto;
+	text-align: left;
+	white-space: normal;
+	background: none;
+	border: none;
+	box-shadow: none;
+}
+
+.mikumodoro-activity-source {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.mikumodoro-session-plan {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-top: 16px;
+}
+
+.mikumodoro-session-track {
+	position: relative;
+	flex: 1;
+	min-width: 80px;
+	height: 44px;
+	margin: 0 8px;
+}
+
+.mikumodoro-session-rail,
+.mikumodoro-session-fill {
+	position: absolute;
+	left: 0;
+	top: 50%;
+	height: 10px;
+	border-radius: 6px;
+	transform: translateY(-50%);
+}
+
+.mikumodoro-session-rail {
+	width: 100%;
+	background: var(--background-modifier-border);
+}
+
+.mikumodoro-session-fill {
+	display: flex;
+	width: var(--session-end);
+	overflow: hidden;
+}
+
+.mikumodoro-session-work {
+	width: var(--session-work-share);
+	background: var(--color-green);
+}
+
+.mikumodoro-session-rest {
+	flex: 1;
+	background: var(--color-red);
+}
+
+button.mikumodoro-session-handle {
+	position: absolute;
+	top: 50%;
+	width: 14px;
+	height: 26px;
+	padding: 0;
+	border: 2px solid var(--background-primary);
+	border-radius: 5px;
+	background: var(--text-normal);
+	box-shadow: 0 1px 3px var(--background-modifier-box-shadow);
+	transform: translate(-50%, -50%);
+	cursor: ew-resize;
+	touch-action: none;
+}
+
+button.mikumodoro-session-total-handle { left: var(--session-end); }
+button.mikumodoro-session-split-handle { left: var(--session-split); }
+
+button.mikumodoro-session-handle:focus-visible {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: 3px;
+	z-index: 1;
+}
+
+.mikumodoro-session-fraction {
+	flex-shrink: 0;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.mikumodoro-session-work-label { color: var(--color-green); }
+.mikumodoro-session-rest-label { color: var(--color-red); }
+
+.mikumodoro-session-hint {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
 /* Connection Status */
 .mikumodoro-connection-status {
 	display: flex;
@@ -249,32 +351,54 @@
 .mikumodoro-task-item-name {
 	font-size: 0.9em;
 	flex: 1;
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
-.mikumodoro-task-item-due {
-	font-size: 0.75em;
-	color: var(--text-muted);
-	background: var(--background-modifier-hover);
-	padding: 2px 6px;
-	border-radius: 8px;
+.mikumodoro-task-badges {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 	flex-shrink: 0;
+	font-size: var(--font-ui-medium);
+	letter-spacing: normal;
+	text-transform: none;
 }
 
-.mikumodoro-task-item.selected .mikumodoro-task-item-due {
-	background: color-mix(in srgb, var(--interactive-accent) 20%, transparent);
-}
+.mikumodoro-task-badges:empty { display: none; }
 
-.mikumodoro-task-item-time {
+.mikumodoro-task-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	font-size: 0.72em;
+	font-weight: 400;
+	line-height: 1.5;
 	color: var(--text-muted);
 	background: var(--background-modifier-hover);
 	padding: 2px 6px;
 	border-radius: 8px;
 	flex-shrink: 0;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
 }
+
+/* Calendar days until the closest task date, including collapsed descendants. */
+.mikumodoro-due-badge {
+	background: color-mix(in srgb, var(--color-blue) var(--mikumodoro-due-blue), var(--color-red));
+	color: var(--text-on-accent);
+}
+
+.mikumodoro-due-badge.due-in-0 { --mikumodoro-due-blue: 0%; }
+.mikumodoro-due-badge.due-in-1 { --mikumodoro-due-blue: 14%; }
+.mikumodoro-due-badge.due-in-2 { --mikumodoro-due-blue: 29%; }
+.mikumodoro-due-badge.due-in-3 { --mikumodoro-due-blue: 43%; }
+.mikumodoro-due-badge.due-in-4 { --mikumodoro-due-blue: 57%; }
+.mikumodoro-due-badge.due-in-5 { --mikumodoro-due-blue: 71%; }
+.mikumodoro-due-badge.due-in-6 { --mikumodoro-due-blue: 86%; }
+.mikumodoro-due-badge.due-in-7 { --mikumodoro-due-blue: 100%; }
 
 .mikumodoro-task-priority {
 	font-size: 0.6em;
@@ -840,14 +964,10 @@ body.mikumodoro-is-resizing {
 
 .mikumodoro-project-name {
 	flex: 1;
-}
-
-.mikumodoro-project-count {
-	font-size: 0.8em;
-	background: var(--background-modifier-hover);
-	padding: 1px 6px;
-	border-radius: 8px;
-	font-weight: 500;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .mikumodoro-project-content {

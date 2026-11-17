@@ -1,5 +1,6 @@
 import { Notice } from 'obsidian';
-import type { MikumodoroSettings, PomodoroSession, TodoistTask, TimerState } from './types';
+import type { MikumodoroSettings, PomodoroSession, TodoistTask, TimerState, SessionPlan } from './types';
+import { validSessionPlan } from './session-plan';
 
 type TimerCallback = (state: TimerState) => void;
 
@@ -26,6 +27,8 @@ export class TimerEngine {
 	private accumulatedBreakMs = 0;
 	private breakExtended = false;
 	private workLimitNotified = false;
+	private sessionPlan: SessionPlan | null = null;
+	private onWorkStart?: (task: TodoistTask) => void;
 
 	constructor(settings: MikumodoroSettings) {
 		this.settings = settings;
@@ -42,6 +45,17 @@ export class TimerEngine {
 
 	setOnSessionComplete(cb: (session: PomodoroSession) => void) {
 		this.onSessionComplete = cb;
+	}
+
+	setOnWorkStart(cb: (task: TodoistTask) => void) {
+		this.onWorkStart = cb;
+	}
+
+	getSessionPlan(): SessionPlan {
+		return this.sessionPlan ? { ...this.sessionPlan } : {
+			workMinutes: this.settings.defaultWorkMinutes,
+			restMinutes: this.settings.defaultWorkMinutes / this.settings.breakRatio,
+		};
 	}
 
 	setOnWorkLimitReached(cb: () => void) {
@@ -70,7 +84,7 @@ export class TimerEngine {
 
 				// Remind once at the target duration, but keep the timer running.
 				if (this.state.mode === 'working') {
-					const workMs = this.settings.defaultWorkMinutes * 60000;
+					const workMs = this.getSessionPlan().workMinutes * 60000;
 					if (this.state.elapsedMs >= workMs && !this.workLimitNotified) {
 						this.workLimitNotified = true;
 						this.onWorkLimitReached?.();
@@ -102,7 +116,7 @@ export class TimerEngine {
 		}
 	}
 
-	startWork(task: TodoistTask | null) {
+	startWork(task: TodoistTask | null, plan?: SessionPlan) {
 		// If currently working or paused, record the partial session first
 		const isPausedWork = this.state.mode === 'paused' && this.pausedMode === 'working';
 		if ((this.state.mode === 'working' || isPausedWork) && this.state.task && this.state.startTime) {
@@ -123,6 +137,7 @@ export class TimerEngine {
 			}
 		}
 
+		this.sessionPlan = validSessionPlan(plan) ? { ...plan } : null;
 		this.state = {
 			mode: 'working',
 			task,
@@ -132,6 +147,7 @@ export class TimerEngine {
 		};
 		this.pausedMode = null;
 		this.workLimitNotified = false;
+		if (task) this.onWorkStart?.(task);
 		this.startInterval();
 		this.notify();
 		const taskName = task ? task.content : 'No task';
@@ -144,8 +160,9 @@ export class TimerEngine {
 
 		this.recordCompletedWork(workEndTime);
 
-		const workMs = this.state.startTime ? workEndTime - this.state.startTime : this.settings.defaultWorkMinutes * 60000;
-		let breakMs = workMs / this.settings.breakRatio;
+		const plan = this.getSessionPlan();
+		const workMs = this.state.startTime ? workEndTime - this.state.startTime : plan.workMinutes * 60000;
+		let breakMs = workMs * plan.restMinutes / plan.workMinutes;
 		breakMs += this.accumulatedBreakMs;
 		this.accumulatedBreakMs = 0;
 		this.breakDurationMs = breakMs;
@@ -221,6 +238,7 @@ export class TimerEngine {
 
 		const taskName = this.state.task ? this.state.task.content : 'No task';
 		const extraMin = Math.round(remainingBreakMs / 60000);
+		if (this.state.task) this.onWorkStart?.(this.state.task);
 		new Notice(`Skipped break! +${extraMin}m added to next break. Back to "${taskName}" (≧▽≦)`);
 	}
 
